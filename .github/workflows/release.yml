@@ -100,7 +100,7 @@ jobs:
           ls -la upload
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           draft: false
           # Tags mit rc/alpha/beta/pre werden als Pre-Release markiert
