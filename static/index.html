@@ -1,0 +1,2223 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>rk40 · K40 Laser</title>
+<style>
+:root{
+  --bg:#0e1116; --panel:#161b22; --panel2:#1c2330; --border:#2a3240;
+  --text:#e6e9ef; --muted:#8b94a3; --accent:#f5a524; --accent2:#3b82f6;
+  --danger:#ef4444; --ok:#22c55e; --radius:12px;
+  --bed-bg:#11151c; --bed-grid:rgba(255,255,255,.045); --bed-fg:#8b94a3;
+  font-size:15px;
+}
+:root[data-theme="light"]{
+  --bg:#eef1f6; --panel:#ffffff; --panel2:#f1f4f8; --border:#d9e0ea;
+  --text:#17202b; --muted:#5d6b7e;
+}
+:root[data-bed="light"]{
+  --bed-bg:#f7f8fa; --bed-grid:rgba(15,23,42,.09); --bed-fg:#7d8798;
+}
+*{box-sizing:border-box; margin:0; padding:0}
+body{
+  background:var(--bg); color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,sans-serif;
+  min-height:100vh;
+}
+header{
+  display:flex; align-items:center; gap:14px; padding:12px 22px;
+  border-bottom:1px solid var(--border); background:var(--panel);
+  position:sticky; top:0; z-index:200;
+}
+header h1{font-size:1.15rem; font-weight:700; letter-spacing:.5px}
+header h1 span{color:var(--accent)}
+.nav{display:flex; gap:4px; background:var(--panel2); border:1px solid var(--border); border-radius:9px; padding:3px}
+.nav button{border:none; background:transparent; padding:6px 14px; font-size:.84rem; border-radius:7px; color:var(--muted)}
+.nav button.active{background:var(--panel); color:var(--text); font-weight:600; box-shadow:0 1px 4px rgba(0,0,0,.25)}
+.nav button:hover:not(.active){color:var(--text); border-color:transparent}
+button.pill{
+  display:inline-flex; align-items:center; gap:7px; padding:6px 14px;
+  border-radius:99px; font-size:.8rem; border:1px solid var(--border);
+  background:var(--panel2); color:var(--muted); cursor:pointer;
+  font-weight:600; white-space:nowrap;
+}
+button.pill:hover:not(:disabled){border-color:var(--accent2); color:var(--text)}
+.pill .dot{width:8px;height:8px;border-radius:50%;background:var(--muted); flex-shrink:0}
+.pill.on{color:var(--ok);border-color:rgba(34,197,94,.35)}
+.pill.on:hover:not(:disabled){color:var(--ok)}
+.pill.on .dot{background:var(--ok); box-shadow:0 0 8px var(--ok)}
+.pill.busy{color:var(--accent);border-color:rgba(245,165,36,.35); cursor:default}
+.pill.busy:hover{border-color:rgba(245,165,36,.35)}
+.pill.busy .dot{background:var(--accent); box-shadow:0 0 8px var(--accent)}
+#hdrprogress{display:none; font-size:.78rem; font-weight:500; opacity:.95; white-space:nowrap}
+.hdr-group{
+  display:flex; align-items:center; gap:2px;
+  background:var(--panel2); border:1px solid var(--border);
+  border-radius:9px; padding:3px;
+}
+.hdr-group button{
+  border:none; background:transparent; width:34px; height:30px; padding:0;
+  border-radius:7px; color:var(--muted);
+  display:inline-flex; align-items:center; justify-content:center;
+}
+.hdr-group button:hover:not(:disabled){background:var(--panel); color:var(--text); border-color:transparent; box-shadow:0 1px 4px rgba(0,0,0,.25)}
+.hdr-group button svg{width:17px; height:17px; display:block}
+.hdr-group #hdrstop{color:var(--danger)}
+.hdr-group #hdrstop:hover:not(:disabled){color:var(--danger); background:rgba(239,68,68,.14)}
+.hdr-group .divider{width:1px; height:18px; background:var(--border); margin:0 4px}
+.spacer{flex:1}
+
+main{
+  display:grid; grid-template-columns:minmax(420px,1fr) 420px; gap:20px;
+  padding:20px 22px; max-width:1400px; margin:0 auto;
+}
+@media (max-width:1000px){ main{grid-template-columns:1fr} }
+main.single{display:block; max-width:940px}
+
+.card{
+  background:var(--panel); border:1px solid var(--border);
+  border-radius:var(--radius); padding:18px;
+}
+.card h2{
+  font-size:.78rem; font-weight:600; text-transform:uppercase;
+  letter-spacing:.12em; color:var(--muted); margin-bottom:14px;
+}
+.card h3{
+  font-size:.82rem; font-weight:600; color:var(--text);
+  margin:16px 0 10px; padding-top:14px; border-top:1px solid var(--border);
+  display:flex; align-items:center; gap:8px;
+}
+.card h3 .opdot{width:10px;height:10px;border-radius:3px;display:inline-block}
+.stack{display:flex; flex-direction:column; gap:20px}
+
+/* Bed */
+#bedwrap{position:relative; width:100%}
+#bed{
+  width:100%; aspect-ratio:3/2; background:
+    linear-gradient(var(--bed-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--bed-grid) 1px, transparent 1px);
+  background-size:calc(100%/30) calc(100%/20);
+  border:1px solid var(--border); border-radius:8px; position:relative;
+  overflow:hidden; background-color:var(--bed-bg);
+  transition:background-color .2s;
+  /* eigene Stacking-Context: Design-z-index bleibt unter dem Header */
+  z-index:0; isolation:isolate;
+}
+#bed .origin{
+  position:absolute; top:6px; left:8px; font-size:.7rem; color:var(--bed-fg);
+}
+#bedtoggle{
+  position:absolute; top:5px; right:6px; z-index:40;
+  padding:3px 9px; font-size:.72rem; border-radius:6px;
+  background:var(--panel); color:var(--muted); opacity:.85;
+}
+.design{
+  position:absolute; border:1.5px dashed var(--accent); border-radius:2px;
+  cursor:grab; display:none; touch-action:none; z-index:2;
+  background:rgba(245,165,36,.06);
+}
+.design img{width:100%;height:100%;display:block;pointer-events:none}
+.design.dragging{cursor:grabbing; border-style:solid}
+.design.active{border-style:solid; box-shadow:0 0 0 2px rgba(245,165,36,.35)}
+.design.locked{cursor:default}
+.design .resizer{
+  position:absolute; right:-8px; bottom:-8px; width:16px; height:16px;
+  background:var(--accent); border-radius:5px; cursor:nwse-resize;
+  border:2px solid var(--panel); touch-action:none;
+  box-shadow:0 1px 4px rgba(0,0,0,.4); display:none;
+}
+.design.active:not(.locked) .resizer{display:block}
+#workpiece{
+  position:absolute; border:1.5px solid var(--accent2); border-radius:3px;
+  background:rgba(59,130,246,.09); cursor:grab; display:none;
+  touch-action:none; z-index:1;
+}
+#workpiece.locked{cursor:default; border-style:solid; background:rgba(59,130,246,.05)}
+#workpiece.active{box-shadow:0 0 0 2px rgba(59,130,246,.4)}
+#workpiece .wplabel{
+  position:absolute; top:3px; left:6px; font-size:.68rem; color:var(--accent2);
+  pointer-events:none; white-space:nowrap;
+}
+.cmark{position:absolute; width:14px; height:14px; pointer-events:none; display:none; z-index:35}
+.cmark::before{content:""; position:absolute; inset:0; border:0 solid #10b981}
+.cmark.tl::before{border-left-width:2px; border-top-width:2px}
+.cmark.tr::before{border-right-width:2px; border-top-width:2px}
+.cmark.bl::before{border-left-width:2px; border-bottom-width:2px}
+.cmark.br::before{border-right-width:2px; border-bottom-width:2px}
+#bedinfo{margin-top:8px; font-size:.78rem; color:var(--muted); display:flex; gap:16px; flex-wrap:wrap}
+
+.stagebar{
+  display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:12px;
+  padding-top:12px; border-top:1px solid var(--border); font-size:.84rem;
+}
+.stagebar .sep{width:1px; height:22px; background:var(--border)}
+
+/* Forms */
+label{display:block; font-size:.78rem; color:var(--muted); margin-bottom:4px}
+input[type=text],input[type=number],select{
+  width:100%; background:var(--panel2); color:var(--text);
+  border:1px solid var(--border); border-radius:8px; padding:8px 10px;
+  font-size:.9rem; outline:none;
+}
+input:focus,select:focus{border-color:var(--accent2)}
+.row{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px}
+.row3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:12px}
+.row4{display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:8px; margin-bottom:10px}
+.checkrow{display:flex; gap:18px; margin-bottom:12px; flex-wrap:wrap}
+.checkrow label{display:flex; align-items:center; gap:7px; margin:0; font-size:.85rem; color:var(--text); cursor:pointer}
+input[type=checkbox]{accent-color:var(--accent); width:16px; height:16px}
+
+button{
+  background:var(--panel2); color:var(--text); border:1px solid var(--border);
+  border-radius:8px; padding:9px 14px; font-size:.88rem; cursor:pointer;
+  transition:background .15s,border-color .15s; font-family:inherit;
+}
+button:hover:not(:disabled){border-color:var(--accent2)}
+button:disabled{opacity:.45; cursor:not-allowed}
+button.primary{background:var(--accent); border-color:var(--accent); color:#161005; font-weight:600}
+button.primary:hover:not(:disabled){background:#ffb83d}
+button.danger{background:rgba(239,68,68,.12); border-color:rgba(239,68,68,.4); color:var(--danger); font-weight:600}
+button.danger:hover:not(:disabled){background:rgba(239,68,68,.25); border-color:var(--danger)}
+button.small{padding:5px 10px; font-size:.78rem}
+.btnrow{display:flex; gap:10px; margin-top:14px}
+.btnrow button{flex:1}
+
+/* Dropzone */
+#drop{
+  border:2px dashed var(--border); border-radius:var(--radius);
+  padding:22px 16px; text-align:center; color:var(--muted); cursor:pointer;
+  transition:border-color .15s, background .15s; font-size:.9rem;
+}
+#drop.hover, #drop:hover{border-color:var(--accent); background:rgba(245,165,36,.05)}
+#drop b{color:var(--text)}
+#fileinfo{font-size:.82rem; color:var(--accent); margin-top:8px; display:none}
+
+/* Layer list */
+#layerlist{display:flex; flex-direction:column; gap:8px}
+.layer{
+  border:1px solid var(--border); border-radius:10px; background:var(--panel2);
+  overflow:hidden;
+}
+.layer.active{border-color:var(--accent2); box-shadow:0 0 0 1px rgba(59,130,246,.25)}
+.layer.wp.active{border-color:var(--accent2)}
+.layer.design-layer.active{border-color:var(--accent); box-shadow:0 0 0 1px rgba(245,165,36,.3)}
+.layer-head{
+  display:flex; align-items:center; gap:6px; padding:8px 10px; cursor:pointer;
+  user-select:none;
+}
+.layer-head .chev{
+  width:22px; height:22px; display:inline-flex; align-items:center; justify-content:center;
+  border-radius:6px; color:var(--muted); font-size:.7rem; flex-shrink:0;
+  transition:transform .2s ease;
+}
+.layer.expanded > .layer-head .chev{transform:rotate(90deg)}
+.layer-head .title{flex:1; min-width:0; font-size:.86rem; font-weight:600;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.layer-head .meta{font-size:.7rem; color:var(--muted); margin-right:4px; flex-shrink:0}
+.iconbtn{
+  width:28px; height:28px; padding:0; display:inline-flex; align-items:center; justify-content:center;
+  border-radius:7px; font-size:.9rem; flex-shrink:0; background:transparent;
+}
+.iconbtn:hover:not(:disabled){background:var(--panel); border-color:var(--border)}
+.iconbtn.on{color:var(--accent); border-color:rgba(245,165,36,.4)}
+.iconbtn.off{opacity:.4}
+.layer-body{
+  display:grid; grid-template-rows:0fr; transition:grid-template-rows .22s ease;
+  border-top:0 solid var(--border);
+}
+.layer.expanded > .layer-body{grid-template-rows:1fr; border-top-width:1px}
+.layer-body > .layer-inner{overflow:hidden}
+.layer-props{
+  display:grid; grid-template-columns:repeat(4,1fr); gap:8px;
+  padding:10px 10px 6px; align-items:end;
+}
+.layer-props label{margin-bottom:2px; font-size:.7rem}
+.layer-props input{padding:6px 7px; font-size:.8rem}
+.layer-actions{
+  display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  padding:4px 10px 10px;
+}
+.layer-actions label{display:flex; align-items:center; gap:6px; margin:0; font-size:.8rem; color:var(--text); cursor:pointer}
+
+.pathrow{
+  display:flex; align-items:center; gap:8px; padding:6px 10px;
+  border-top:1px solid var(--border);
+}
+.pathrow .swatch{
+  width:18px; height:18px; border-radius:5px; flex-shrink:0;
+  border:1px solid rgba(255,255,255,.25);
+}
+.pathrow .chex{font-family:ui-monospace,monospace; font-size:.72rem; color:var(--muted); width:62px}
+.pathrow .ccount{font-size:.7rem; color:var(--muted); flex:1}
+.opbtns{display:flex; gap:3px}
+.opbtns button{
+  width:28px; height:26px; padding:0; font-size:.78rem;
+  border-radius:6px; display:inline-flex; align-items:center; justify-content:center;
+}
+.opbtns button.active-raster{background:rgba(245,165,36,.2); border-color:var(--accent); color:var(--accent)}
+.opbtns button.active-vector{background:rgba(37,99,235,.2); border-color:#3b82f6; color:#7eb0ff}
+.opbtns button.active-cut{background:rgba(239,68,68,.18); border-color:#ef4444; color:#ff9d9d}
+.opbtns button.active-ignore{background:rgba(139,148,163,.2); border-color:var(--muted); color:var(--muted)}
+
+.layer.empty-hint{padding:14px; text-align:center; color:var(--muted); font-size:.84rem; border-style:dashed}
+
+/* Jog pad */
+.jog{display:grid; grid-template-columns:repeat(3,52px); grid-template-rows:repeat(3,44px); gap:6px; justify-content:center}
+.jog button{font-size:1.05rem; padding:0}
+.controlbar{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px}
+.controlbar button{flex:1; min-width:80px}
+
+/* Progress */
+#progresswrap{display:none; margin-top:12px}
+#progressbar{height:8px; background:var(--panel2); border-radius:99px; overflow:hidden}
+#progressfill{height:100%; width:0%; background:var(--accent); border-radius:99px; transition:width .3s}
+
+/* Jobs */
+.job{
+  display:flex; gap:14px; padding:14px; border:1px solid var(--border);
+  border-radius:10px; margin-bottom:10px; background:var(--panel2);
+  align-items:center;
+}
+.job img{
+  width:96px; height:70px; object-fit:contain; background:#fff;
+  border-radius:6px; flex-shrink:0;
+}
+.job .info{flex:1; min-width:0}
+.job .name{font-weight:600; font-size:.95rem; margin-bottom:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.job .meta{font-size:.75rem; color:var(--muted); line-height:1.6; margin-bottom:8px}
+.job .actions{display:flex; gap:6px; flex-wrap:wrap}
+.badge{display:inline-block; padding:1px 7px; border-radius:5px; font-size:.7rem; background:rgba(59,130,246,.15); color:#7eb0ff; margin-right:5px}
+.badge.r{background:rgba(245,165,36,.15); color:#ffc86b}
+.badge.c{background:rgba(239,68,68,.15); color:#ff9d9d}
+.empty{color:var(--muted); font-size:.85rem; text-align:center; padding:18px 0}
+dialog{
+  background:var(--panel); color:var(--text); border:1px solid var(--border);
+  border-radius:var(--radius); padding:22px; max-width:380px; width:90%;
+}
+dialog::backdrop{background:rgba(0,0,0,.6)}
+.toast{
+  position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
+  background:var(--panel2); border:1px solid var(--border); color:var(--text);
+  padding:10px 18px; border-radius:10px; font-size:.85rem; z-index:300;
+  box-shadow:0 8px 30px rgba(0,0,0,.5); display:none;
+}
+.hint{font-size:.75rem; color:var(--muted); margin-top:6px; line-height:1.5}
+#errbar{
+  display:none; align-items:center; gap:12px;
+  background:rgba(239,68,68,.14); border-bottom:1px solid rgba(239,68,68,.5);
+  color:var(--danger); padding:10px 22px; font-size:.88rem; font-weight:600;
+}
+#errbar button{margin-left:auto; flex-shrink:0}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>rk<span>40</span></h1>
+  <nav class="nav">
+    <button id="nav_lab" class="active" data-i18n="nav.control">Steuerung</button>
+    <button id="nav_projects" data-i18n="nav.projects">Projekte</button>
+  </nav>
+  <div class="spacer"></div>
+  <button class="pill" id="connpill"><span class="dot"></span><span id="conntext">Nicht verbunden</span><span id="hdrprogress"></span></button>
+  <div class="hdr-group">
+    <button id="hdrhome" data-i18n-title="title.home" title="Home" data-needsconn>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h5v-6h4v6h5V9.5"/></svg>
+    </button>
+    <button id="hdrstop" data-i18n-title="title.stop" title="Stopp" data-needsconn>
+      <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+    </button>
+    <span class="divider"></span>
+    <button id="btntheme" data-i18n-title="title.theme_toggle" title="Hell/Dunkel umschalten"></button>
+    <button id="btnlang" title="Language / Sprache">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14.2 14.2 0 0 1 0 18M12 3a14.2 14.2 0 0 0 0 18"/></svg>
+    </button>
+  </div>
+</header>
+
+<div id="errbar">
+  <span>⚠</span><span id="errtext"></span>
+  <button class="small" id="errdismiss" data-i18n="btn.dismiss_error">Ausblenden</button>
+</div>
+
+<!-- ===================== Steuerung ===================== -->
+<main id="view_lab">
+  <!-- Left column -->
+  <div class="stack">
+    <div class="card">
+      <h2 data-i18n="bed.heading">Arbeitsfläche · 300 × 200 mm</h2>
+      <div id="bedwrap">
+        <div id="bed">
+          <span class="origin" data-i18n="bed.origin">⌂ Home (0,0)</span>
+          <button id="bedtoggle" data-i18n="bed.toggle_label" data-i18n-title="bed.toggle_title" title="Hintergrund der Arbeitsfläche umschalten">◐ Fläche</button>
+          <div id="workpiece"><span class="wplabel"></span></div>
+          <div class="cmark tl" id="mark_tl"></div>
+          <div class="cmark tr" id="mark_tr"></div>
+          <div class="cmark bl" id="mark_bl"></div>
+          <div class="cmark br" id="mark_br"></div>
+        </div>
+      </div>
+      <div id="bedinfo">
+        <span id="posinfo">Design: –</span>
+        <span id="sizeinfo"></span>
+        <span style="margin-left:auto" data-i18n="bed.hint">Ziehen = platzieren · Ecke = skalieren · Raster 5 mm (Strg = 0,5 mm)</span>
+      </div>
+      <div class="stagebar">
+        <button class="small" id="alignh" data-i18n="bed.align_h" data-i18n-title="bed.align_h_title" title="Aktives Design horizontal mittig auf dem Werkstück" disabled>↔ Mittig</button>
+        <button class="small" id="alignv" data-i18n="bed.align_v" data-i18n-title="bed.align_v_title" title="Aktives Design vertikal mittig auf dem Werkstück" disabled>↕ Mittig</button>
+        <select id="clipmode" style="width:auto; padding:5px 8px; font-size:.8rem" data-i18n-title="bed.clip_title" title="Design an der Werkstück-Grenze begrenzen" disabled>
+          <option value="off" data-i18n="bed.clip_off">Grenze: aus</option>
+          <option value="constrain" data-i18n="bed.clip_constrain">Grenze: nicht hinausschieben</option>
+          <option value="clip" data-i18n="bed.clip_clip">Grenze: Überstand nicht lasern</option>
+        </select>
+        <span class="sep"></span>
+        <button class="small" id="btnreset" data-i18n="bed.reset" data-i18n-title="bed.reset_title" title="SVG, Position und Parameter zurücksetzen">↺ Stage zurücksetzen</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 data-i18n="laser.heading">Laser-Steuerung</h2>
+      <div class="controlbar">
+        <button id="btnhome" data-i18n="laser.home">⌂ Home</button>
+        <button id="btnunlock" data-i18n="laser.unlock">🔓 Entriegeln</button>
+        <button id="btnpause" data-i18n="btn.pause">⏸ Pause</button>
+        <button id="btnstop" class="danger" data-i18n="laser.stop">■ Stopp</button>
+      </div>
+      <div style="display:flex; gap:22px; align-items:center; justify-content:center; flex-wrap:wrap">
+        <div class="jog">
+          <span></span><button data-jog="0,-1">↑</button><span></span>
+          <button data-jog="-1,0">←</button>
+          <div style="display:flex;align-items:center;justify-content:center;font-size:.7rem;color:var(--muted)">JOG</div>
+          <button data-jog="1,0">→</button>
+          <span></span><button data-jog="0,1">↓</button><span></span>
+        </div>
+        <div>
+          <label data-i18n="laser.step_label">Schrittweite</label>
+          <select id="jogstep" style="width:110px">
+            <option value="0.1" data-i18n="laser.step_0_1">0,1 mm</option>
+            <option value="1" data-i18n="laser.step_1">1 mm</option>
+            <option value="10" selected data-i18n="laser.step_10">10 mm</option>
+            <option value="50" data-i18n="laser.step_50">50 mm</option>
+          </select>
+        </div>
+      </div>
+      <div id="progresswrap">
+        <div style="display:flex;justify-content:space-between;font-size:.78rem;color:var(--muted);margin-bottom:5px">
+          <span id="progressjob"></span><span id="progresspct"></span>
+        </div>
+        <div id="progressbar"><div id="progressfill"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right column -->
+  <div class="stack">
+    <div class="card">
+      <h2 data-i18n="svg.heading">SVG laden</h2>
+      <div id="drop">
+        <span data-i18n-html="svg.drop"><b>SVG hierher ziehen</b> oder klicken · mehrere möglich</span>
+        <div id="fileinfo"></div>
+      </div>
+      <input type="file" id="file" accept=".svg,image/svg+xml" multiple hidden>
+    </div>
+
+    <div class="card">
+      <h2 data-i18n="layers.heading">Pfade &amp; Werkstück</h2>
+      <div id="layerlist"></div>
+    </div>
+
+    <div class="card">
+      <h2 data-i18n="prepare.heading">Vorbereiten</h2>
+      <div style="margin-bottom:12px">
+        <label data-i18n="prepare.name_label">Name</label>
+        <input type="text" id="jobname" data-i18n-placeholder="prepare.name_placeholder" placeholder="z. B. Schneidebrett">
+      </div>
+
+      <div id="sec_raster">
+        <h3 style="margin-top:0;padding-top:0;border-top:none"><span class="opdot" style="background:var(--accent)"></span><span data-i18n="op.section_raster">Gravur (Raster)</span></h3>
+        <div class="row3">
+          <div>
+            <label data-i18n="param.feed">Tempo (mm/s)</label>
+            <input type="number" id="feed" value="180" min="0.5" max="400" step="1">
+          </div>
+          <div>
+            <label data-i18n="param.passes">Durchgänge</label>
+            <input type="number" id="passes" value="1" min="1" max="50" step="1">
+          </div>
+          <div>
+            <label data-i18n="param.line_spacing">Zeilenabstand</label>
+            <select id="rstep">
+              <option value="1" data-i18n="param.line_0_025">0,025 mm</option>
+              <option value="2" selected data-i18n="param.line_0_051">0,051 mm</option>
+              <option value="3" data-i18n="param.line_0_076">0,076 mm</option>
+              <option value="4" data-i18n="param.line_0_102">0,102 mm</option>
+            </select>
+          </div>
+        </div>
+        <div class="checkrow">
+          <div style="flex:0 0 130px">
+            <label data-i18n="param.dpi">Auflösung (DPI)</label>
+            <select id="rdpi">
+              <option value="250">250</option>
+              <option value="500" selected>500</option>
+              <option value="1000">1000</option>
+            </select>
+          </div>
+          <label style="align-self:end"><input type="checkbox" id="dither"> <span data-i18n="param.dither">Dithering</span></label>
+          <label style="align-self:end"><input type="checkbox" id="invert"> <span data-i18n="param.invert">Invertieren</span></label>
+          <label style="align-self:end" data-i18n-title="param.bottom_up_title" title="Y-Achse steppt beim Gravieren nur nach oben – hilfreich, wenn die Mechanik in einer Y-Richtung Probleme macht"><input type="checkbox" id="bottomup"> <span data-i18n="param.bottom_up">Von unten nach oben ↑</span></label>
+        </div>
+      </div>
+
+      <div id="sec_engrave" style="display:none">
+        <h3><span class="opdot" style="background:#2563eb"></span><span data-i18n="op.section_vector">Vektor-Gravur</span></h3>
+        <div class="row">
+          <div>
+            <label data-i18n="param.feed">Tempo (mm/s)</label>
+            <input type="number" id="efeed" value="30" min="0.5" max="240" step="1">
+          </div>
+          <div>
+            <label data-i18n="param.passes">Durchgänge</label>
+            <input type="number" id="epasses" value="1" min="1" max="50" step="1">
+          </div>
+        </div>
+      </div>
+
+      <div id="sec_cut" style="display:none">
+        <h3><span class="opdot" style="background:#dc2626"></span><span data-i18n="op.section_cut">Schnitt</span></h3>
+        <div class="row">
+          <div>
+            <label data-i18n="param.feed">Tempo (mm/s)</label>
+            <input type="number" id="cfeed" value="10" min="0.5" max="240" step="0.5">
+          </div>
+          <div>
+            <label data-i18n="param.passes">Durchgänge</label>
+            <input type="number" id="cpasses" value="1" min="1" max="50" step="1">
+          </div>
+        </div>
+      </div>
+
+      <div class="btnrow">
+        <button class="primary" id="btnprint" disabled data-needsconn data-i18n="btn.print">▶ Drucken</button>
+        <button id="btnsave" disabled data-i18n="btn.save_project">💾 Als Projekt speichern</button>
+      </div>
+      <div style="display:flex; justify-content:flex-end; margin-top:8px">
+        <button class="small" id="btndefaults" data-i18n="btn.save_defaults" data-i18n-title="btn.save_defaults_title" title="Aktuelle Tempo-/Raster-/Durchgangs-Werte als Standard auf dem Server speichern">Werte als Standard speichern</button>
+      </div>
+      <div class="hint" data-i18n-html="hint.print">
+        <b>Drucken</b> sliced und startet alle sichtbaren Designs nacheinander.
+        Reihenfolge: Gravur → Vektor-Gravur → Schnitt je Design.
+        Vor dem Druck den Kopf mit <b>⌂ Home</b> nullen. Leistung stellst du am Potentiometer ein.
+        Pfade auf <b>Ignorieren</b> erscheinen transparent und werden nicht gelasert.
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- ===================== Projekte ===================== -->
+<main id="view_projects" class="single" style="display:none">
+  <div class="card">
+    <h2 data-i18n="projects.heading">Gespeicherte Projekte</h2>
+    <div id="joblist"><div class="empty" data-i18n="projects.empty">Noch keine Projekte gespeichert</div></div>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<dialog id="printdlg">
+  <h2 style="font-size:1rem;margin-bottom:14px" data-i18n="dialog.print_title">Projekt drucken</h2>
+  <p id="printdlgname" style="font-size:.9rem;margin-bottom:12px"></p>
+  <label data-i18n="dialog.repeats_label">Wiederholungen (kompletter Job)</label>
+  <input type="number" id="printpasses" value="1" min="1" max="50" style="margin-bottom:16px">
+  <div class="hint" style="margin-bottom:16px" data-i18n="dialog.print_hint">
+    Der Kopf sollte auf der Home-Position stehen (oben links). Die im Projekt
+    gespeicherten Durchgänge pro Operation laufen automatisch.
+  </div>
+  <div style="display:flex;gap:10px;justify-content:flex-end">
+    <button id="printcancel" data-i18n="dialog.cancel">Abbrechen</button>
+    <button class="primary" id="printok" data-i18n="dialog.print_ok">▶ Drucken</button>
+  </div>
+</dialog>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const BED_W = 300, BED_H = 200;
+const SNAP_COARSE = 5, SNAP_FINE = 0.5;
+
+let designs = [];   // oben in der Liste = oberster Layer
+let activeId = null; // design.id oder "wp"
+let nextDesignNum = 1;
+let deviceStatus = { state:"disconnected", busy:false, paused:false, progress:0, message:"" };
+let restoring = true;
+let wp = { x:20, y:20, w:120, h:80, visible:false, locked:false, expanded:false, markers:false };
+let clipmode = "off";
+
+// Fortschritt / ETA über die gesamte Druck-Warteschlange
+let printEta = { estimate_s:0, started_at:0, queue_total:0, queue_done:0 };
+let printQueue = []; // [{name, svg, settings}]
+let printBusy = false;
+
+/////////////////////// i18n ///////////////////////
+const I18N = {
+  de: {
+    "nav.control": "Steuerung",
+    "nav.projects": "Projekte",
+    "btn.connect": "Verbinden",
+    "btn.disconnect": "Trennen",
+    "btn.dismiss_error": "Ausblenden",
+    "status.disconnected": "Nicht verbunden",
+    "status.connected": "Verbunden",
+    "status.printing": "Druckt…",
+    "status.paused": "Pausiert",
+    "btn.pause": "⏸ Pause",
+    "btn.resume": "▶ Weiter",
+    "title.home": "Home",
+    "title.stop": "Stopp",
+    "title.theme_toggle": "Hell/Dunkel umschalten",
+    "title.theme_light": "Helles Design",
+    "title.theme_dark": "Dunkles Design",
+    "title.lang": "Sprache / Language",
+    "bed.heading": "Arbeitsfläche · 300 × 200 mm",
+    "bed.origin": "⌂ Home (0,0)",
+    "bed.toggle_label": "◐ Fläche",
+    "bed.toggle_title": "Hintergrund der Arbeitsfläche umschalten",
+    "bed.pos_design_empty": "Design: –",
+    "bed.pos_design": "Design: {x} / {y} mm",
+    "bed.pos_workpiece": "Werkstück: {x} / {y} mm",
+    "bed.hint": "Ziehen = platzieren · Ecke = skalieren · Raster 5 mm (Strg = 0,5 mm)",
+    "bed.align_h": "↔ Mittig",
+    "bed.align_h_title": "Aktives Design horizontal mittig auf dem Werkstück",
+    "bed.align_v": "↕ Mittig",
+    "bed.align_v_title": "Aktives Design vertikal mittig auf dem Werkstück",
+    "bed.clip_title": "Design an der Werkstück-Grenze begrenzen",
+    "bed.clip_off": "Grenze: aus",
+    "bed.clip_constrain": "Grenze: nicht hinausschieben",
+    "bed.clip_clip": "Grenze: Überstand nicht lasern",
+    "bed.reset": "↺ Stage zurücksetzen",
+    "bed.reset_title": "SVG, Position und Parameter zurücksetzen",
+    "workpiece.label": "Werkstück {w}×{h} · {x}/{y}",
+    "workpiece.layer_title": "Werkstück",
+    "laser.heading": "Laser-Steuerung",
+    "laser.home": "⌂ Home",
+    "laser.unlock": "🔓 Entriegeln",
+    "laser.stop": "■ Stopp",
+    "laser.step_label": "Schrittweite",
+    "laser.step_0_1": "0,1 mm",
+    "laser.step_1": "1 mm",
+    "laser.step_10": "10 mm",
+    "laser.step_50": "50 mm",
+    "svg.heading": "SVG laden",
+    "svg.drop": "<b>SVG hierher ziehen</b> oder klicken · mehrere möglich",
+    "svg.fileinfo": "{n} Design{plural} auf der Stage",
+    "svg.empty_hint": "Noch kein Design geladen – SVG oben ablegen",
+    "svg.error_read": "SVG konnte nicht gelesen werden: {error}",
+    "svg.error_no_files": "Bitte SVG-Datei(en) ablegen",
+    "design.default_name": "Design {n}",
+    "layers.heading": "Pfade & Werkstück",
+    "layer.show_title": "Anzeigen",
+    "layer.lock_title": "Sperren",
+    "layer.remove_title": "Entfernen",
+    "layer.remove_confirm": "Design „{name}“ von der Stage entfernen?",
+    "layer.markers_visible": "Marker sichtbar",
+    "layer.laser_markers": "Marker lasern",
+    "path.count": "{n} Pfad{plural}",
+    "op.raster_title": "Raster-Gravur",
+    "op.vector_engrave_title": "Vektor-Gravur",
+    "op.vector_cut_title": "Schnitt",
+    "op.ignore_title": "Ignorieren (nicht lasern)",
+    "op.vector_combo_title": "Vektor (Gravur/Schnitt)",
+    "op.vector_short": "Vektor",
+    "op.cut_toggle": "Schnitt (klicken → Vektor-Gravur)",
+    "op.engrave_toggle": "Vektor-Gravur (klicken → Schnitt)",
+    "toast.markers_design": "Marker werden gelasert – Leistung ggf. niedrig einstellen",
+    "toast.markers_workpiece": "Werkstück-Marker werden gelasert – Leistung ggf. niedrig einstellen",
+    "prepare.heading": "Vorbereiten",
+    "prepare.name_label": "Name",
+    "prepare.name_placeholder": "z. B. Schneidebrett",
+    "op.section_raster": "Gravur (Raster)",
+    "op.section_vector": "Vektor-Gravur",
+    "op.section_cut": "Schnitt",
+    "param.feed": "Tempo (mm/s)",
+    "param.passes": "Durchgänge",
+    "param.line_spacing": "Zeilenabstand",
+    "param.line_0_025": "0,025 mm",
+    "param.line_0_051": "0,051 mm",
+    "param.line_0_076": "0,076 mm",
+    "param.line_0_102": "0,102 mm",
+    "param.dpi": "Auflösung (DPI)",
+    "param.dither": "Dithering",
+    "param.invert": "Invertieren",
+    "param.bottom_up": "Von unten nach oben ↑",
+    "param.bottom_up_title": "Y-Achse steppt beim Gravieren nur nach oben – hilfreich, wenn die Mechanik in einer Y-Richtung Probleme macht",
+    "btn.print": "▶ Drucken",
+    "btn.save_project": "💾 Als Projekt speichern",
+    "btn.save_defaults": "Werte als Standard speichern",
+    "btn.save_defaults_title": "Aktuelle Tempo-/Raster-/Durchgangs-Werte als Standard auf dem Server speichern",
+    "hint.print": "<b>Drucken</b> sliced und startet alle sichtbaren Designs nacheinander. Reihenfolge: Gravur → Vektor-Gravur → Schnitt je Design. Vor dem Druck den Kopf mit <b>⌂ Home</b> nullen. Leistung stellst du am Potentiometer ein. Pfade auf <b>Ignorieren</b> erscheinen transparent und werden nicht gelasert.",
+    "progress.eta": " · noch ~{time}",
+    "time.seconds": "{n} s",
+    "time.minutes_seconds": "{m} min {s} s",
+    "time.hours_minutes": "{h} h {m} min",
+    "btn.slicing": "⚙ Slice…",
+    "btn.calculating": "⚙ Berechne…",
+    "print.no_designs": "Kein druckbares Design (sichtbar und nicht ignoriert)",
+    "print.confirm": "Jetzt drucken?\n\n{summary}\n\nKopf sollte auf Home stehen.",
+    "print.summary_line": "• {name}: {w}×{h} @ {x}/{y}",
+    "print.toast_active": "Druckt „{name}“ · ca. {time}",
+    "print.toast_queue": " · noch {n} Design(s)",
+    "reset.confirm": "Stage zurücksetzen? SVG, Position und Parameter werden verworfen.",
+    "defaults.saved": "Standardwerte gespeichert",
+    "save.name_required": "Bitte einen Namen vergeben",
+    "save.success": "„{name}“ als Projekt gespeichert · ca. {time}",
+    "projects.heading": "Gespeicherte Projekte",
+    "projects.empty": "Noch keine Projekte gespeichert",
+    "projects.badge_raster": "Raster",
+    "projects.badge_v_engrave": "V-Gravur",
+    "projects.badge_cut": "Schnitt",
+    "projects.meta": "{badges}{w} × {h} mm · Pos {x}/{y} · ca. {time}",
+    "projects.btn_print": "▶ Drucken",
+    "projects.btn_load_stage": "↩ Auf Stage laden",
+    "projects.btn_download_egv": "⤓ EGV",
+    "projects.btn_download_svg": "⤓ SVG",
+    "projects.btn_delete": "Löschen",
+    "projects.delete_confirm": "„{name}“ löschen?",
+    "projects.load_success": "„{name}“ auf die Stage geladen",
+    "projects.source_not_found": "Quelle nicht gefunden",
+    "dialog.print_title": "Projekt drucken",
+    "dialog.repeats_label": "Wiederholungen (kompletter Job)",
+    "dialog.print_hint": "Der Kopf sollte auf der Home-Position stehen (oben links). Die im Projekt gespeicherten Durchgänge pro Operation laufen automatisch.",
+    "dialog.cancel": "Abbrechen",
+    "dialog.print_ok": "▶ Drucken"
+  },
+  en: {
+    "nav.control": "Control",
+    "nav.projects": "Projects",
+    "btn.connect": "Connect",
+    "btn.disconnect": "Disconnect",
+    "btn.dismiss_error": "Dismiss",
+    "status.disconnected": "Not connected",
+    "status.connected": "Connected",
+    "status.printing": "Printing…",
+    "status.paused": "Paused",
+    "btn.pause": "⏸ Pause",
+    "btn.resume": "▶ Resume",
+    "title.home": "Home",
+    "title.stop": "Stop",
+    "title.theme_toggle": "Toggle light/dark",
+    "title.theme_light": "Light theme",
+    "title.theme_dark": "Dark theme",
+    "title.lang": "Language / Sprache",
+    "bed.heading": "Work area · 300 × 200 mm",
+    "bed.origin": "⌂ Home (0,0)",
+    "bed.toggle_label": "◐ Surface",
+    "bed.toggle_title": "Toggle work area background",
+    "bed.pos_design_empty": "Design: –",
+    "bed.pos_design": "Design: {x} / {y} mm",
+    "bed.pos_workpiece": "Workpiece: {x} / {y} mm",
+    "bed.hint": "Drag = place · Corner = scale · Grid 5 mm (Ctrl = 0.5 mm)",
+    "bed.align_h": "↔ Center H",
+    "bed.align_h_title": "Center active design horizontally on workpiece",
+    "bed.align_v": "↕ Center V",
+    "bed.align_v_title": "Center active design vertically on workpiece",
+    "bed.clip_title": "Constrain design to workpiece boundary",
+    "bed.clip_off": "Boundary: off",
+    "bed.clip_constrain": "Boundary: don't push outside",
+    "bed.clip_clip": "Boundary: don't laser overhang",
+    "bed.reset": "↺ Reset stage",
+    "bed.reset_title": "Reset SVG, position and parameters",
+    "workpiece.label": "Workpiece {w}×{h} · {x}/{y}",
+    "workpiece.layer_title": "Workpiece",
+    "laser.heading": "Laser control",
+    "laser.home": "⌂ Home",
+    "laser.unlock": "🔓 Unlock",
+    "laser.stop": "■ Stop",
+    "laser.step_label": "Step size",
+    "laser.step_0_1": "0.1 mm",
+    "laser.step_1": "1 mm",
+    "laser.step_10": "10 mm",
+    "laser.step_50": "50 mm",
+    "svg.heading": "Load SVG",
+    "svg.drop": "<b>Drop SVG here</b> or click · multiple allowed",
+    "svg.fileinfo": "{n} design{plural} on stage",
+    "svg.empty_hint": "No design loaded yet – drop SVG above",
+    "svg.error_read": "Could not read SVG: {error}",
+    "svg.error_no_files": "Please drop SVG file(s)",
+    "design.default_name": "Design {n}",
+    "layers.heading": "Paths & workpiece",
+    "layer.show_title": "Show",
+    "layer.lock_title": "Lock",
+    "layer.remove_title": "Remove",
+    "layer.remove_confirm": "Remove design \"{name}\" from stage?",
+    "layer.markers_visible": "Show markers",
+    "layer.laser_markers": "Laser markers",
+    "path.count": "{n} path{plural}",
+    "op.raster_title": "Raster engrave",
+    "op.vector_engrave_title": "Vector engrave",
+    "op.vector_cut_title": "Cut",
+    "op.ignore_title": "Ignore (don't laser)",
+    "op.vector_combo_title": "Vector (engrave/cut)",
+    "op.vector_short": "Vector",
+    "op.cut_toggle": "Cut (click → vector engrave)",
+    "op.engrave_toggle": "Vector engrave (click → cut)",
+    "toast.markers_design": "Lasering markers – set power low if needed",
+    "toast.markers_workpiece": "Lasering workpiece markers – set power low if needed",
+    "prepare.heading": "Prepare",
+    "prepare.name_label": "Name",
+    "prepare.name_placeholder": "e.g. cutting board",
+    "op.section_raster": "Engrave (raster)",
+    "op.section_vector": "Vector engrave",
+    "op.section_cut": "Cut",
+    "param.feed": "Speed (mm/s)",
+    "param.passes": "Passes",
+    "param.line_spacing": "Line spacing",
+    "param.line_0_025": "0.025 mm",
+    "param.line_0_051": "0.051 mm",
+    "param.line_0_076": "0.076 mm",
+    "param.line_0_102": "0.102 mm",
+    "param.dpi": "Resolution (DPI)",
+    "param.dither": "Dithering",
+    "param.invert": "Invert",
+    "param.bottom_up": "Bottom to top ↑",
+    "param.bottom_up_title": "Y axis only steps upward while engraving – helpful if mechanics struggle in one Y direction",
+    "btn.print": "▶ Print",
+    "btn.save_project": "💾 Save as project",
+    "btn.save_defaults": "Save values as defaults",
+    "btn.save_defaults_title": "Save current speed/raster/pass values as server defaults",
+    "hint.print": "<b>Print</b> slices and starts all visible designs one after another. Order: raster → vector engrave → cut per design. Zero the head with <b>⌂ Home</b> before printing. Set power on the potentiometer. Paths set to <b>Ignore</b> appear transparent and are not lasered.",
+    "progress.eta": " · ~{time} left",
+    "time.seconds": "{n} s",
+    "time.minutes_seconds": "{m} min {s} s",
+    "time.hours_minutes": "{h} h {m} min",
+    "btn.slicing": "⚙ Slicing…",
+    "btn.calculating": "⚙ Calculating…",
+    "print.no_designs": "No printable design (visible and not ignored)",
+    "print.confirm": "Print now?\n\n{summary}\n\nHead should be at home.",
+    "print.summary_line": "• {name}: {w}×{h} @ {x}/{y}",
+    "print.toast_active": "Printing \"{name}\" · approx. {time}",
+    "print.toast_queue": " · {n} design(s) remaining",
+    "reset.confirm": "Reset stage? SVG, position and parameters will be discarded.",
+    "defaults.saved": "Default values saved",
+    "save.name_required": "Please enter a name",
+    "save.success": "\"{name}\" saved as project · approx. {time}",
+    "projects.heading": "Saved projects",
+    "projects.empty": "No projects saved yet",
+    "projects.badge_raster": "Raster",
+    "projects.badge_v_engrave": "V-Engrave",
+    "projects.badge_cut": "Cut",
+    "projects.meta": "{badges}{w} × {h} mm · Pos {x}/{y} · approx. {time}",
+    "projects.btn_print": "▶ Print",
+    "projects.btn_load_stage": "↩ Load to stage",
+    "projects.btn_download_egv": "⤓ EGV",
+    "projects.btn_download_svg": "⤓ SVG",
+    "projects.btn_delete": "Delete",
+    "projects.delete_confirm": "Delete \"{name}\"?",
+    "projects.load_success": "\"{name}\" loaded to stage",
+    "projects.source_not_found": "Source not found",
+    "dialog.print_title": "Print project",
+    "dialog.repeats_label": "Repetitions (complete job)",
+    "dialog.print_hint": "The head should be at the home position (top left). Passes per operation saved in the project run automatically.",
+    "dialog.cancel": "Cancel",
+    "dialog.print_ok": "▶ Print"
+  }
+};
+
+function detectLang(){
+  const saved = localStorage.getItem("rk40_lang");
+  if(saved === "de" || saved === "en") return saved;
+  const nav = (navigator.language || "de").toLowerCase();
+  return nav.startsWith("de") ? "de" : "en";
+}
+let lang = detectLang();
+
+function t(key, params){
+  const dict = I18N[lang] || I18N.de;
+  let s = dict[key];
+  if(s == null) s = I18N.de[key];
+  if(s == null) return key;
+  if(params){
+    for(const [k, v] of Object.entries(params)){
+      s = s.split("{"+k+"}").join(String(v));
+    }
+  }
+  return s;
+}
+function localeTag(){ return lang === "de" ? "de-DE" : "en-US"; }
+function pluralDesign(n){ return n === 1 ? "" : "s"; }
+function pluralPath(n){ return lang === "de" ? (n === 1 ? "" : "e") : (n === 1 ? "" : "s"); }
+
+function applyStaticI18n(){
+  document.documentElement.lang = lang;
+  document.querySelectorAll("[data-i18n]").forEach(el => {
+    el.textContent = t(el.getAttribute("data-i18n"));
+  });
+  document.querySelectorAll("[data-i18n-title]").forEach(el => {
+    el.title = t(el.getAttribute("data-i18n-title"));
+  });
+  document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
+    el.placeholder = t(el.getAttribute("data-i18n-placeholder"));
+  });
+  document.querySelectorAll("[data-i18n-html]").forEach(el => {
+    el.innerHTML = t(el.getAttribute("data-i18n-html"));
+  });
+  const bl = $("btnlang");
+  if(bl){
+    bl.title = lang === "de" ? "Switch to English" : "Auf Deutsch umschalten";
+  }
+}
+
+function setLang(next){
+  lang = next;
+  localStorage.setItem("rk40_lang", lang);
+  applyStaticI18n();
+  applyStatus(deviceStatus);
+  renderLayerList();
+  updateStage();
+  applyTheme(document.documentElement.dataset.theme || "dark");
+  if(location.hash === "#projekte") loadJobs();
+}
+
+
+/////////////////////// helpers ///////////////////////
+function toast(msg, isErr){
+  const el = $("toast");
+  el.textContent = msg;
+  el.style.display = "block";
+  el.style.borderColor = isErr ? "var(--danger)" : "var(--border)";
+  clearTimeout(el._h);
+  el._h = setTimeout(()=> el.style.display="none", 3500);
+}
+async function api(path, opts){
+  const r = await fetch(path, opts);
+  let body = null;
+  try { body = await r.json(); } catch(e){}
+  if(!r.ok) throw new Error(body && body.error ? body.error : ("HTTP "+r.status));
+  return body;
+}
+async function post(path, data){
+  return api(path, {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: data !== undefined ? JSON.stringify(data) : undefined
+  });
+}
+async function put(path, data){
+  return api(path, {
+    method:"PUT",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify(data)
+  });
+}
+function fmtTime(s){
+  s = Math.max(0, Math.round(s));
+  if(s < 60) return t("time.seconds", {n:s});
+  const m = Math.floor(s/60);
+  if(m < 60) return t("time.minutes_seconds", {m:m, s:s%60});
+  return t("time.hours_minutes", {h:Math.floor(m/60), m:m%60});
+}
+function fmtMM(v){ return (Math.round(v*10)/10).toLocaleString(localeTag()); }
+function num(id, fallback){ const v = parseFloat($(id).value); return isFinite(v) ? v : fallback; }
+function snapMM(v, fine){
+  const g = fine ? SNAP_FINE : SNAP_COARSE;
+  return Math.round(v / g) * g;
+}
+function uid(){ return "d"+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+
+/////////////////////// routing ///////////////////////
+function route(){
+  const projects = location.hash === "#projekte";
+  $("view_lab").style.display = projects ? "none" : "";
+  $("view_projects").style.display = projects ? "" : "none";
+  $("nav_lab").classList.toggle("active", !projects);
+  $("nav_projects").classList.toggle("active", projects);
+  if(projects) loadJobs();
+  else updateStage();
+}
+$("nav_lab").addEventListener("click", ()=> location.hash = "");
+$("nav_projects").addEventListener("click", ()=> location.hash = "#projekte");
+window.addEventListener("hashchange", route);
+
+/////////////////////// device status ///////////////////////
+function applyStatus(s){
+  const wasBusy = deviceStatus.busy;
+  deviceStatus = s;
+  const pill = $("connpill");
+  const connected = s.state === "connected";
+  pill.className = "pill " + (s.busy ? "busy" : (connected ? "on" : ""));
+  $("conntext").textContent = s.busy ? (s.paused ? t("status.paused") : t("status.printing"))
+    : connected ? t("status.connected") : t("status.disconnected");
+  // Klick-Aktion + Servermeldung als Tooltip statt floatendem Text
+  const action = s.busy ? "" : (connected ? t("btn.disconnect") : t("btn.connect"));
+  pill.title = action + (s.message ? (action ? " · " : "") + s.message : "");
+  $("btnpause").textContent = s.paused ? t("btn.resume") : t("btn.pause");
+
+  const eb = $("errbar");
+  if(s.error && s.error !== dismissedError){
+    $("errtext").textContent = s.error;
+    eb.style.display = "flex";
+  } else {
+    eb.style.display = "none";
+  }
+
+  updateProgressUI(s);
+
+  // Druck-Warteschlange: nächstes Design starten, wenn der Lauf fertig ist
+  if(wasBusy && !s.busy && printBusy){
+    printEta.queue_done = Math.min(printEta.queue_total, printEta.queue_done + 1);
+    if(printQueue.length){
+      setTimeout(drainPrintQueue, 200);
+    } else {
+      printBusy = false;
+      printEta = { estimate_s:0, started_at:0, queue_total:0, queue_done:0 };
+    }
+  }
+
+  document.querySelectorAll("[data-needsconn]").forEach(b=>{
+    const isPrint = b.id === "btnprint";
+    const isStop = b.id === "btnstop" || b.id === "hdrstop";
+    if(isStop){
+      b.disabled = !connected || (!s.busy && !printQueue.length);
+      return;
+    }
+    b.disabled = !connected || s.busy || printBusy || (isPrint && !designs.length);
+  });
+  refreshJobButtons();
+}
+function updateProgressUI(s){
+  const pw = $("progresswrap");
+  const hp = $("hdrprogress");
+  if(!s.busy && !printBusy){
+    pw.style.display = "none";
+    hp.style.display = "none";
+    return;
+  }
+  const localPct = s.busy ? s.progress : 0;
+  let overall = localPct;
+  if(printEta.queue_total > 1){
+    overall = (printEta.queue_done + localPct) / printEta.queue_total;
+  }
+  const pct = Math.round(overall * 100);
+  let etaTxt = "";
+  if(printEta.estimate_s > 0 && printEta.started_at){
+    const elapsed = (Date.now() - printEta.started_at) / 1000;
+    // Mischung aus Schätzung und gemessenem Tempo
+    let remain;
+    if(overall > 0.02){
+      const projected = elapsed / overall;
+      remain = Math.max(0, projected - elapsed);
+      // mit ursprünglicher Schätzung glätten
+      const fromEst = printEta.estimate_s * (1 - overall);
+      remain = remain * 0.6 + fromEst * 0.4;
+    } else {
+      remain = printEta.estimate_s * (1 - overall);
+    }
+    etaTxt = t("progress.eta", {time: fmtTime(remain)});
+  }
+  pw.style.display = "block";
+  $("progressjob").textContent = s.job_name || "";
+  $("progresspct").textContent = pct+" %"+etaTxt;
+  $("progressfill").style.width = pct+"%";
+  hp.style.display = "inline";
+  hp.textContent = "· "+pct+" %"+etaTxt;
+}
+let dismissedError = null;
+$("errdismiss").addEventListener("click", () => {
+  dismissedError = deviceStatus.error;
+  $("errbar").style.display = "none";
+});
+function connectSSE(){
+  const es = new EventSource("/api/events");
+  es.addEventListener("status", ev => { try{ applyStatus(JSON.parse(ev.data)); }catch(e){} });
+  es.onerror = () => { es.close(); setTimeout(connectSSE, 3000); };
+}
+async function pollStatus(){
+  try { applyStatus(await api("/api/status")); } catch(e){}
+}
+
+/////////////////////// ops ///////////////////////
+function opIcons(){
+  return {
+    raster: { icon:"▦", title: t("op.raster_title") },
+    vector_engrave: { icon:"✎", title: t("op.vector_engrave_title") },
+    vector_cut: { icon:"✂", title: t("op.vector_cut_title") },
+    ignore: { icon:"⊘", title: t("op.ignore_title") }
+  };
+}
+function defaultOpFor(color){
+  if(color === "#ff0000") return "vector_cut";
+  if(color === "#0000ff") return "vector_engrave";
+  if(color === "#ffffff") return "ignore";
+  return "raster";
+}
+function allActiveOps(){
+  const ops = new Set();
+  for(const d of designs){
+    if(!d.visible) continue;
+    for(const c of d.palette){
+      ops.add(d.colorOps[c.color] || "raster");
+    }
+  }
+  return ops;
+}
+function updateOpSections(){
+  const ops = designs.length ? allActiveOps() : new Set(["raster"]);
+  $("sec_raster").style.display  = ops.has("raster") ? "block" : "none";
+  $("sec_engrave").style.display = ops.has("vector_engrave") ? "block" : "none";
+  $("sec_cut").style.display     = ops.has("vector_cut") ? "block" : "none";
+}
+
+/////////////////////// SVG preview (ignore = transparent) ///////////////////////
+function hexToRgb(hex){
+  const h = hex.replace("#","");
+  if(h.length !== 6) return null;
+  return {
+    r: parseInt(h.slice(0,2),16),
+    g: parseInt(h.slice(2,4),16),
+    b: parseInt(h.slice(4,6),16)
+  };
+}
+function fadeIgnoredSvg(svgText, colorOps){
+  let out = svgText;
+  for(const [color, op] of Object.entries(colorOps)){
+    if(op !== "ignore") continue;
+    const rgb = hexToRgb(color);
+    if(!rgb) continue;
+    const rgba = `rgba(${rgb.r},${rgb.g},${rgb.b},0.18)`;
+    const variants = [
+      color, color.toUpperCase(),
+      `rgb(${rgb.r},${rgb.g},${rgb.b})`,
+      `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`,
+      `RGB(${rgb.r},${rgb.g},${rgb.b})`
+    ];
+    for(const v of variants){
+      const reFill = new RegExp(`(fill\\s*=\\s*["'])${escapeRe(v)}(["'])`, "gi");
+      const reStroke = new RegExp(`(stroke\\s*=\\s*["'])${escapeRe(v)}(["'])`, "gi");
+      const reStyleFill = new RegExp(`(fill\\s*:\\s*)${escapeRe(v)}(\\s*;|\\s*")`, "gi");
+      const reStyleStroke = new RegExp(`(stroke\\s*:\\s*)${escapeRe(v)}(\\s*;|\\s*")`, "gi");
+      out = out.replace(reFill, `$1${rgba}$2`);
+      out = out.replace(reStroke, `$1${rgba}$2`);
+      out = out.replace(reStyleFill, `$1${rgba}$2`);
+      out = out.replace(reStyleStroke, `$1${rgba}$2`);
+    }
+  }
+  return out;
+}
+function escapeRe(s){ return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
+function designDataUrl(d){
+  const svg = fadeIgnoredSvg(d.svg, d.colorOps);
+  return "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svg)));
+}
+
+/////////////////////// designs ///////////////////////
+function designMM(d){
+  return { w: d.sizeMM.w * d.scale, h: d.sizeMM.h * d.scale };
+}
+function getDesign(id){ return designs.find(d => d.id === id); }
+function activeDesign(){
+  if(activeId === "wp") return null;
+  return getDesign(activeId) || designs[0] || null;
+}
+function selectTarget(id){
+  activeId = id;
+  renderLayerList();
+  updateStage();
+  scheduleWsSave();
+}
+function ensureDesignEl(d){
+  if(d.el && d.el.isConnected) return d.el;
+  const el = document.createElement("div");
+  el.className = "design";
+  el.dataset.id = d.id;
+  const img = document.createElement("img");
+  img.alt = "";
+  const resizer = document.createElement("div");
+  resizer.className = "resizer";
+  el.appendChild(img);
+  el.appendChild(resizer);
+  $("bed").appendChild(el);
+  bindDesignInteractions(el, d);
+  d.el = el;
+  return el;
+}
+function refreshDesignPreview(d){
+  const el = ensureDesignEl(d);
+  const img = el.querySelector("img");
+  img.src = designDataUrl(d);
+}
+
+async function addDesignFromSvg(text, filename, restoreState){
+  let pal = null;
+  try {
+    pal = await post("/api/palette", { svg: text });
+  } catch(e){
+    toast(t("svg.error_read", {error: e.message}), true);
+    return null;
+  }
+  const colorOps = {};
+  const palette = pal.colors || [];
+  if(restoreState && restoreState.colorOps){
+    for(const c of palette) colorOps[c.color] = restoreState.colorOps[c.color] || defaultOpFor(c.color);
+  } else {
+    for(const c of palette) colorOps[c.color] = defaultOpFor(c.color);
+  }
+  const d = {
+    id: (restoreState && restoreState.id) || uid(),
+    name: (restoreState && restoreState.name) || (filename || t("design.default_name", {n: nextDesignNum})).replace(/\.svg$/i,""),
+    svg: text,
+    sizeMM: { w: pal.width_mm, h: pal.height_mm },
+    palette,
+    colorOps,
+    x: restoreState && restoreState.x != null ? restoreState.x : 10,
+    y: restoreState && restoreState.y != null ? restoreState.y : 10,
+    scale: restoreState && restoreState.scale != null ? restoreState.scale : 1,
+    visible: restoreState && restoreState.visible != null ? !!restoreState.visible : true,
+    locked: !!(restoreState && restoreState.locked),
+    expanded: !!(restoreState && restoreState.expanded),
+    markers: !!(restoreState && restoreState.markers),
+    el: null
+  };
+  nextDesignNum++;
+  designs.unshift(d);
+  ensureDesignEl(d);
+  refreshDesignPreview(d);
+  activeId = d.id;
+  if(!$("jobname").value) $("jobname").value = d.name;
+  $("btnsave").disabled = false;
+  $("fileinfo").style.display = "block";
+  $("fileinfo").textContent = t("svg.fileinfo", {n: designs.length, plural: pluralDesign(designs.length)});
+  renderLayerList();
+  updateOpSections();
+  updateStage();
+  applyStatus(deviceStatus);
+  return d;
+}
+
+async function loadFiles(fileList){
+  const files = [...fileList].filter(f => /svg/i.test(f.type + f.name));
+  if(!files.length){ toast(t("svg.error_no_files"), true); return; }
+  for(const f of files){
+    const text = await f.text();
+    await addDesignFromSvg(text, f.name, null);
+  }
+  saveWorkspace(true);
+}
+
+$("drop").addEventListener("click", ()=> $("file").click());
+$("file").addEventListener("change", e => {
+  if(e.target.files.length) loadFiles(e.target.files);
+  e.target.value = "";
+});
+["dragover","dragenter"].forEach(ev => $("drop").addEventListener(ev, e => {
+  e.preventDefault(); $("drop").classList.add("hover");
+}));
+["dragleave","drop"].forEach(ev => $("drop").addEventListener(ev, e => {
+  e.preventDefault(); $("drop").classList.remove("hover");
+}));
+$("drop").addEventListener("drop", e => {
+  loadFiles(e.dataTransfer.files);
+});
+
+function removeDesign(id){
+  const idx = designs.findIndex(d => d.id === id);
+  if(idx < 0) return;
+  const d = designs[idx];
+  if(d.el) d.el.remove();
+  designs.splice(idx, 1);
+  if(activeId === id) activeId = designs[0] ? designs[0].id : (wp.visible ? "wp" : null);
+  $("btnsave").disabled = !designs.length;
+  $("fileinfo").textContent = designs.length
+    ? t("svg.fileinfo", {n: designs.length, plural: pluralDesign(designs.length)}) : "";
+  if(!designs.length) $("fileinfo").style.display = "none";
+  renderLayerList();
+  updateOpSections();
+  updateStage();
+  saveWorkspace(true);
+}
+
+/////////////////////// layer list UI ///////////////////////
+function renderLayerList(){
+  const list = $("layerlist");
+  list.innerHTML = "";
+
+  if(!designs.length){
+    const hint = document.createElement("div");
+    hint.className = "layer empty-hint";
+    hint.textContent = t("svg.empty_hint");
+    list.appendChild(hint);
+  }
+
+  for(const d of designs){
+    list.appendChild(buildDesignLayer(d));
+  }
+  list.appendChild(buildWorkpieceLayer());
+
+  // dynamisch erzeugte Buttons am Verbindungsstatus ausrichten
+  const connected = deviceStatus.state === "connected";
+  list.querySelectorAll("[data-needsconn]").forEach(b => {
+    b.disabled = !connected || deviceStatus.busy || printBusy;
+  });
+}
+
+function buildDesignLayer(d){
+  const root = document.createElement("div");
+  root.className = "layer design-layer" + (d.expanded ? " expanded" : "") + (activeId === d.id ? " active" : "");
+  root.dataset.id = d.id;
+
+  const head = document.createElement("div");
+  head.className = "layer-head";
+  const mm = designMM(d);
+  head.innerHTML = `
+    <span class="chev">▶</span>
+    <span class="title"></span>
+    <span class="meta">${fmtMM(mm.w)}×${fmtMM(mm.h)}</span>
+    <button class="iconbtn ${d.visible?"":"off"}" data-act="vis" title="${t("layer.show_title")}">${d.visible?"👁":"🙈"}</button>
+    <button class="iconbtn ${d.locked?"on":""}" data-act="lock" title="${t("layer.lock_title")}">${d.locked?"🔒":"🔓"}</button>
+    <button class="iconbtn" data-act="del" title="${t("layer.remove_title")}">✕</button>`;
+  head.querySelector(".title").textContent = d.name;
+  head.addEventListener("click", e => {
+    if(e.target.closest("[data-act]")) return;
+    if(e.target.closest(".chev") || e.detail === 2){
+      d.expanded = !d.expanded;
+      renderLayerList();
+      scheduleWsSave();
+      return;
+    }
+    selectTarget(d.id);
+  });
+  head.querySelector(".chev").addEventListener("click", e => {
+    e.stopPropagation();
+    d.expanded = !d.expanded;
+    renderLayerList();
+    scheduleWsSave();
+  });
+  head.querySelector('[data-act="vis"]').addEventListener("click", e => {
+    e.stopPropagation();
+    d.visible = !d.visible;
+    renderLayerList(); updateStage(); scheduleWsSave();
+  });
+  head.querySelector('[data-act="lock"]').addEventListener("click", e => {
+    e.stopPropagation();
+    d.locked = !d.locked;
+    renderLayerList(); updateStage(); scheduleWsSave();
+  });
+  head.querySelector('[data-act="del"]').addEventListener("click", e => {
+    e.stopPropagation();
+    if(confirm(t("layer.remove_confirm", {name: d.name}))) removeDesign(d.id);
+  });
+  root.appendChild(head);
+
+  const body = document.createElement("div");
+  body.className = "layer-body";
+  const inner = document.createElement("div");
+  inner.className = "layer-inner";
+
+  // X Y W H
+  const props = document.createElement("div");
+  props.className = "layer-props";
+  props.innerHTML = `
+    <div><label>X</label><input type="number" data-f="x" step="0.5" value="${round1(d.x)}"></div>
+    <div><label>Y</label><input type="number" data-f="y" step="0.5" value="${round1(d.y)}"></div>
+    <div><label>W</label><input type="number" data-f="w" step="0.5" min="0.5" value="${round1(mm.w)}"></div>
+    <div><label>H</label><input type="number" data-f="h" step="0.5" min="0.5" value="${round1(mm.h)}"></div>`;
+  props.querySelectorAll("input").forEach(inp => {
+    inp.addEventListener("change", () => {
+      const f = inp.dataset.f;
+      const v = parseFloat(inp.value);
+      if(!isFinite(v)) return;
+      if(f === "x") d.x = Math.max(0, Math.min(BED_W - mm.w, v));
+      else if(f === "y") d.y = Math.max(0, Math.min(BED_H - mm.h, v));
+      else if(f === "w" && v > 0){
+        d.scale = v / d.sizeMM.w;
+      } else if(f === "h" && v > 0){
+        d.scale = v / d.sizeMM.h;
+      }
+      selectTarget(d.id);
+      updateStage();
+      renderLayerList();
+      scheduleWsSave();
+    });
+    inp.addEventListener("click", e => e.stopPropagation());
+  });
+  inner.appendChild(props);
+
+  const actions = document.createElement("div");
+  actions.className = "layer-actions";
+  actions.innerHTML = `
+    <label><input type="checkbox" data-markers ${d.markers?"checked":""}> ${t("layer.markers_visible")}</label>
+    <button class="small primary" data-laser-markers data-needsconn>${t("layer.laser_markers")}</button>`;
+  actions.querySelector("[data-markers]").addEventListener("change", e => {
+    d.markers = e.target.checked;
+    // nur ein Marker-Set gleichzeitig sinnvoll: andere aus
+    if(d.markers){
+      wp.markers = false;
+      for(const o of designs) if(o.id !== d.id) o.markers = false;
+    }
+    renderLayerList(); updateStage(); scheduleWsSave();
+  });
+  actions.querySelector("[data-laser-markers]").addEventListener("click", async e => {
+    e.stopPropagation();
+    const size = designMM(d);
+    try {
+      await post("/api/print/markers", { x_mm:d.x, y_mm:d.y, w_mm:size.w, h_mm:size.h });
+      toast(t("toast.markers_design"));
+    } catch(err){ toast(err.message, true); }
+  });
+  inner.appendChild(actions);
+
+  // Pfade / Farben
+  const icons = opIcons();
+  for(const c of d.palette){
+    const op = d.colorOps[c.color] || "raster";
+    const row = document.createElement("div");
+    row.className = "pathrow";
+    row.innerHTML = `
+      <span class="swatch" style="background:${c.color}"></span>
+      <span class="chex">${c.color}</span>
+      <span class="ccount">${t("path.count", {n: c.count, plural: pluralPath(c.count)})}</span>
+      <div class="opbtns">
+        <button type="button" data-op="raster" title="${icons.raster.title}">${icons.raster.icon}</button>
+        <button type="button" data-op="vector" title="${t("op.vector_combo_title")}">✎</button>
+        <button type="button" data-op="ignore" title="${icons.ignore.title}">${icons.ignore.icon}</button>
+      </div>`;
+    const btns = row.querySelectorAll("[data-op]");
+    function paintOp(){
+      const cur = d.colorOps[c.color] || "raster";
+      btns.forEach(b => {
+        b.className = "";
+        const kind = b.dataset.op;
+        if(kind === "raster" && cur === "raster") b.classList.add("active-raster");
+        if(kind === "ignore" && cur === "ignore") b.classList.add("active-ignore");
+        if(kind === "vector" && (cur === "vector_engrave" || cur === "vector_cut")){
+          b.classList.add(cur === "vector_cut" ? "active-cut" : "active-vector");
+          b.textContent = cur === "vector_cut" ? "✂" : "✎";
+          b.title = cur === "vector_cut" ? t("op.cut_toggle") : t("op.engrave_toggle");
+        } else if(kind === "vector"){
+          b.textContent = "✎";
+          b.title = t("op.vector_short");
+        }
+      });
+    }
+    paintOp();
+    btns.forEach(b => b.addEventListener("click", e => {
+      e.stopPropagation();
+      const kind = b.dataset.op;
+      const cur = d.colorOps[c.color] || "raster";
+      if(kind === "raster") d.colorOps[c.color] = "raster";
+      else if(kind === "ignore") d.colorOps[c.color] = "ignore";
+      else {
+        // Vector: Toggle zwischen Gravur und Schnitt, Default je Farbe
+        if(cur === "vector_engrave") d.colorOps[c.color] = "vector_cut";
+        else if(cur === "vector_cut") d.colorOps[c.color] = "vector_engrave";
+        else d.colorOps[c.color] = defaultOpFor(c.color) === "vector_cut" ? "vector_cut" : "vector_engrave";
+      }
+      paintOp();
+      refreshDesignPreview(d);
+      updateOpSections();
+      scheduleWsSave();
+    }));
+    inner.appendChild(row);
+  }
+
+  body.appendChild(inner);
+  root.appendChild(body);
+  return root;
+}
+
+function buildWorkpieceLayer(){
+  const root = document.createElement("div");
+  root.className = "layer wp" + (wp.expanded ? " expanded" : "") + (activeId === "wp" ? " active" : "");
+
+  const head = document.createElement("div");
+  head.className = "layer-head";
+  head.innerHTML = `
+    <span class="chev">▶</span>
+    <span class="title">${t("workpiece.layer_title")}</span>
+    <span class="meta">${fmtMM(wp.w)}×${fmtMM(wp.h)}</span>
+    <button class="iconbtn ${wp.visible?"":"off"}" data-act="vis" title="${t("layer.show_title")}">${wp.visible?"👁":"🙈"}</button>
+    <button class="iconbtn ${wp.locked?"on":""}" data-act="lock" title="${t("layer.lock_title")}">${wp.locked?"🔒":"🔓"}</button>`;
+  head.addEventListener("click", e => {
+    if(e.target.closest("[data-act]")) return;
+    if(e.target.closest(".chev")){
+      wp.expanded = !wp.expanded;
+      renderLayerList();
+      scheduleWsSave();
+      return;
+    }
+    if(!wp.visible){ wp.visible = true; }
+    selectTarget("wp");
+  });
+  head.querySelector(".chev").addEventListener("click", e => {
+    e.stopPropagation();
+    wp.expanded = !wp.expanded;
+    renderLayerList();
+    scheduleWsSave();
+  });
+  head.querySelector('[data-act="vis"]').addEventListener("click", e => {
+    e.stopPropagation();
+    wp.visible = !wp.visible;
+    if(!wp.visible && activeId === "wp") activeId = designs[0] ? designs[0].id : null;
+    renderLayerList(); updateStage(); scheduleWsSave();
+  });
+  head.querySelector('[data-act="lock"]').addEventListener("click", e => {
+    e.stopPropagation();
+    wp.locked = !wp.locked;
+    renderLayerList(); updateStage(); scheduleWsSave();
+  });
+  root.appendChild(head);
+
+  const body = document.createElement("div");
+  body.className = "layer-body";
+  const inner = document.createElement("div");
+  inner.className = "layer-inner";
+
+  const props = document.createElement("div");
+  props.className = "layer-props";
+  props.innerHTML = `
+    <div><label>X</label><input type="number" data-f="x" step="0.5" value="${round1(wp.x)}"></div>
+    <div><label>Y</label><input type="number" data-f="y" step="0.5" value="${round1(wp.y)}"></div>
+    <div><label>W</label><input type="number" data-f="w" step="0.5" min="1" max="300" value="${round1(wp.w)}"></div>
+    <div><label>H</label><input type="number" data-f="h" step="0.5" min="1" max="200" value="${round1(wp.h)}"></div>`;
+  props.querySelectorAll("input").forEach(inp => {
+    inp.addEventListener("change", () => {
+      const f = inp.dataset.f;
+      const v = parseFloat(inp.value);
+      if(!isFinite(v)) return;
+      if(f === "x") wp.x = Math.max(0, Math.min(BED_W - wp.w, v));
+      else if(f === "y") wp.y = Math.max(0, Math.min(BED_H - wp.h, v));
+      else if(f === "w") wp.w = Math.max(1, Math.min(BED_W, v));
+      else if(f === "h") wp.h = Math.max(1, Math.min(BED_H, v));
+      wp.visible = true;
+      selectTarget("wp");
+      updateStage();
+      renderLayerList();
+      scheduleWsSave();
+    });
+    inp.addEventListener("click", e => e.stopPropagation());
+  });
+  inner.appendChild(props);
+
+  const actions = document.createElement("div");
+  actions.className = "layer-actions";
+  actions.innerHTML = `
+    <label><input type="checkbox" data-markers ${wp.markers?"checked":""}> ${t("layer.markers_visible")}</label>
+    <button class="small primary" data-laser-markers data-needsconn>${t("layer.laser_markers")}</button>`;
+  actions.querySelector("[data-markers]").addEventListener("change", e => {
+    wp.markers = e.target.checked;
+    if(wp.markers){
+      for(const o of designs) o.markers = false;
+    }
+    wp.visible = true;
+    renderLayerList(); updateStage(); scheduleWsSave();
+  });
+  actions.querySelector("[data-laser-markers]").addEventListener("click", async e => {
+    e.stopPropagation();
+    try {
+      await post("/api/print/markers", { x_mm:wp.x, y_mm:wp.y, w_mm:wp.w, h_mm:wp.h });
+      toast(t("toast.markers_workpiece"));
+    } catch(err){ toast(err.message, true); }
+  });
+  inner.appendChild(actions);
+
+  body.appendChild(inner);
+  root.appendChild(body);
+  return root;
+}
+function round1(v){ return Math.round(v*10)/10; }
+
+/////////////////////// stage / placement ///////////////////////
+function wpActive(){ return wp.visible; }
+function clipMode(){ return wpActive() ? clipmode : "off"; }
+function clampToWp(nx, ny, d){
+  const cl = (v, min, max) => max < min ? (min+max)/2 : Math.max(min, Math.min(max, v));
+  return {
+    x: cl(nx, wp.x, wp.x + wp.w - d.w),
+    y: cl(ny, wp.y, wp.y + wp.h - d.h)
+  };
+}
+
+function updateStage(){
+  updateWorkpiece();
+  const bed = $("bed").getBoundingClientRect();
+  const hasWp = wpActive();
+  const ad = activeDesign();
+  $("alignh").disabled = !ad || !hasWp;
+  $("alignv").disabled = !ad || !hasWp;
+  $("clipmode").disabled = !hasWp;
+  $("clipmode").value = clipmode;
+
+  if(bed.width === 0) return;
+
+  // z-index: Liste oben = höher
+  designs.forEach((d, i) => {
+    const el = ensureDesignEl(d);
+    const mm = designMM(d);
+    const show = d.visible;
+    el.style.display = show ? "block" : "none";
+    if(!show) return;
+    el.style.zIndex = String(2 + (designs.length - i));
+    el.style.left   = (d.x/BED_W*bed.width)+"px";
+    el.style.top    = (d.y/BED_H*bed.height)+"px";
+    el.style.width  = (mm.w/BED_W*bed.width)+"px";
+    el.style.height = (mm.h/BED_H*bed.height)+"px";
+    el.classList.toggle("active", activeId === d.id);
+    el.classList.toggle("locked", d.locked);
+    const fits = d.x >= 0 && d.y >= 0 && d.x+mm.w <= BED_W+0.01 && d.y+mm.h <= BED_H+0.01;
+    el.style.borderColor = fits ? "var(--accent)" : "var(--danger)";
+
+    const img = el.querySelector("img");
+    if(img && clipMode() === "clip"){
+      const insTop    = Math.max(0, wp.y - d.y);
+      const insLeft   = Math.max(0, wp.x - d.x);
+      const insRight  = Math.max(0, (d.x + mm.w) - (wp.x + wp.w));
+      const insBottom = Math.max(0, (d.y + mm.h) - (wp.y + wp.h));
+      img.style.clipPath = `inset(${insTop/mm.h*100}% ${insRight/mm.w*100}% ${insBottom/mm.h*100}% ${insLeft/mm.w*100}%)`;
+    } else if(img){
+      img.style.clipPath = "";
+    }
+  });
+
+  // Marker: von dem Objekt mit markers=true
+  let markerBox = null;
+  if(wp.markers && wp.visible) markerBox = { x:wp.x, y:wp.y, w:wp.w, h:wp.h };
+  else {
+    const md = designs.find(d => d.markers && d.visible);
+    if(md){ const mm = designMM(md); markerBox = { x:md.x, y:md.y, w:mm.w, h:mm.h }; }
+  }
+  updateMarkers(markerBox);
+
+  if(activeId === "wp" && wp.visible){
+    $("posinfo").textContent = t("bed.pos_workpiece", {x: fmtMM(wp.x), y: fmtMM(wp.y)});
+    $("sizeinfo").textContent = fmtMM(wp.w)+" × "+fmtMM(wp.h)+" mm";
+  } else if(ad){
+    const mm = designMM(ad);
+    $("posinfo").textContent = t("bed.pos_design", {x: fmtMM(ad.x), y: fmtMM(ad.y)});
+    $("sizeinfo").textContent = fmtMM(mm.w)+" × "+fmtMM(mm.h)+" mm · "+(Math.round(ad.scale*1000)/10).toLocaleString(localeTag())+" %";
+  } else {
+    $("posinfo").textContent = t("bed.pos_design_empty");
+    $("sizeinfo").textContent = "";
+  }
+}
+
+function updateWorkpiece(){
+  const el = $("workpiece");
+  el.style.display = wp.visible ? "block" : "none";
+  if(!wp.visible) return;
+  const bed = $("bed").getBoundingClientRect();
+  if(bed.width === 0) return;
+  wp.x = Math.max(0, Math.min(BED_W-wp.w, wp.x));
+  wp.y = Math.max(0, Math.min(BED_H-wp.h, wp.y));
+  el.style.left = (wp.x/BED_W*bed.width)+"px";
+  el.style.top  = (wp.y/BED_H*bed.height)+"px";
+  el.style.width  = (wp.w/BED_W*bed.width)+"px";
+  el.style.height = (wp.h/BED_H*bed.height)+"px";
+  el.classList.toggle("locked", wp.locked);
+  el.classList.toggle("active", activeId === "wp");
+  el.querySelector(".wplabel").textContent =
+    t("workpiece.label", {w: fmtMM(wp.w), h: fmtMM(wp.h), x: fmtMM(wp.x), y: fmtMM(wp.y)})+(wp.locked ? " 🔒" : "");
+}
+
+function updateMarkers(bbox){
+  const show = !!bbox;
+  for(const id of ["mark_tl","mark_tr","mark_bl","mark_br"]){
+    $(id).style.display = show ? "block" : "none";
+  }
+  if(!show) return;
+  const bed = $("bed").getBoundingClientRect();
+  const px = v => v/BED_W*bed.width, py = v => v/BED_H*bed.height;
+  const x0 = px(bbox.x), y0 = py(bbox.y);
+  const x1 = px(bbox.x+bbox.w), y1 = py(bbox.y+bbox.h);
+  const m = 14;
+  place("mark_tl", x0, y0);
+  place("mark_tr", x1-m, y0);
+  place("mark_bl", x0, y1-m);
+  place("mark_br", x1-m, y1-m);
+  function place(id, l, t){
+    $(id).style.left = l+"px";
+    $(id).style.top = t+"px";
+  }
+}
+
+$("alignh").addEventListener("click", ()=>{
+  const d = activeDesign(); if(!d || !wpActive()) return;
+  const mm = designMM(d);
+  d.x = snapMM((wp.x + (wp.w - mm.w)/2), false);
+  updateStage(); renderLayerList(); scheduleWsSave();
+});
+$("alignv").addEventListener("click", ()=>{
+  const d = activeDesign(); if(!d || !wpActive()) return;
+  const mm = designMM(d);
+  d.y = snapMM((wp.y + (wp.h - mm.h)/2), false);
+  updateStage(); renderLayerList(); scheduleWsSave();
+});
+$("clipmode").addEventListener("change", ()=>{
+  clipmode = $("clipmode").value;
+  if(clipMode() === "constrain"){
+    for(const d of designs){
+      const mm = designMM(d);
+      const p = clampToWp(d.x, d.y, mm);
+      d.x = p.x; d.y = p.y;
+    }
+  }
+  updateStage(); scheduleWsSave();
+});
+window.addEventListener("resize", updateStage);
+
+// Drag / Resize Designs
+function bindDesignInteractions(el, dRef){
+  // dRef is the object; we look up by id so closures stay valid
+  let drag = null, resize = null;
+  const resizer = el.querySelector(".resizer");
+
+  el.addEventListener("pointerdown", e => {
+    const d = getDesign(el.dataset.id); if(!d) return;
+    if(e.target === resizer) return;
+    selectTarget(d.id);
+    if(d.locked) return;
+    e.preventDefault();
+    el.setPointerCapture(e.pointerId);
+    el.classList.add("dragging");
+    drag = { x:e.clientX, y:e.clientY, ox:d.x, oy:d.y, fine:e.ctrlKey||e.metaKey };
+  });
+  el.addEventListener("pointermove", e => {
+    if(!drag) return;
+    const d = getDesign(el.dataset.id); if(!d) return;
+    const bed = $("bed").getBoundingClientRect();
+    const mm = designMM(d);
+    const fine = e.ctrlKey || e.metaKey || drag.fine;
+    let nx = drag.ox + (e.clientX-drag.x)/bed.width*BED_W;
+    let ny = drag.oy + (e.clientY-drag.y)/bed.height*BED_H;
+    nx = snapMM(nx, fine);
+    ny = snapMM(ny, fine);
+    nx = Math.max(0, Math.min(BED_W-mm.w, nx));
+    ny = Math.max(0, Math.min(BED_H-mm.h, ny));
+    if(clipMode() === "constrain"){
+      const p = clampToWp(nx, ny, mm);
+      nx = p.x; ny = p.y;
+    }
+    d.x = nx; d.y = ny;
+    updateStage();
+  });
+  ["pointerup","pointercancel"].forEach(ev => el.addEventListener(ev, () => {
+    if(drag){ renderLayerList(); scheduleWsSave(); }
+    drag = null; el.classList.remove("dragging");
+  }));
+
+  resizer.addEventListener("pointerdown", e => {
+    const d = getDesign(el.dataset.id); if(!d || d.locked) return;
+    e.preventDefault(); e.stopPropagation();
+    selectTarget(d.id);
+    resizer.setPointerCapture(e.pointerId);
+    resize = { x:e.clientX, scale:d.scale };
+  });
+  resizer.addEventListener("pointermove", e => {
+    if(!resize) return;
+    const d = getDesign(el.dataset.id); if(!d) return;
+    const bed = $("bed").getBoundingClientRect();
+    const dxmm = (e.clientX-resize.x)/bed.width*BED_W;
+    const w0 = d.sizeMM.w*resize.scale;
+    let s = (w0 + dxmm)/d.sizeMM.w;
+    s = Math.min(s, (BED_W-d.x)/d.sizeMM.w, (BED_H-d.y)/d.sizeMM.h);
+    d.scale = Math.max(0.02, s);
+    updateStage();
+  });
+  ["pointerup","pointercancel"].forEach(ev => resizer.addEventListener(ev, () => {
+    if(resize){ renderLayerList(); scheduleWsSave(); }
+    resize = null;
+  }));
+}
+
+// Werkstück ziehen
+(function(){
+  const el = $("workpiece");
+  let drag = null;
+  el.addEventListener("pointerdown", e => {
+    selectTarget("wp");
+    if(wp.locked) return;
+    e.preventDefault();
+    el.setPointerCapture(e.pointerId);
+    drag = { x:e.clientX, y:e.clientY, ox:wp.x, oy:wp.y };
+  });
+  el.addEventListener("pointermove", e => {
+    if(!drag) return;
+    const bed = $("bed").getBoundingClientRect();
+    const fine = e.ctrlKey || e.metaKey;
+    let nx = drag.ox + (e.clientX-drag.x)/bed.width*BED_W;
+    let ny = drag.oy + (e.clientY-drag.y)/bed.height*BED_H;
+    nx = snapMM(nx, fine);
+    ny = snapMM(ny, fine);
+    wp.x = Math.max(0, Math.min(BED_W-wp.w, nx));
+    wp.y = Math.max(0, Math.min(BED_H-wp.h, ny));
+    updateStage();
+  });
+  ["pointerup","pointercancel"].forEach(ev => el.addEventListener(ev, () => {
+    if(drag){ renderLayerList(); scheduleWsSave(); }
+    drag = null;
+  }));
+})();
+
+// Klick auf leere Bed-Fläche deselektiert nicht hart – Stage behält Fokus
+$("bed").addEventListener("pointerdown", e => {
+  if(e.target.id === "bed" || e.target.classList.contains("origin")){
+    // nichts
+  }
+});
+
+// Pfeiltasten verschieben
+document.addEventListener("keydown", e => {
+  const tag = (e.target.tagName || "").toLowerCase();
+  if(tag === "input" || tag === "textarea" || tag === "select") return;
+  const keys = { ArrowLeft:[-1,0], ArrowRight:[1,0], ArrowUp:[0,-1], ArrowDown:[0,1] };
+  const delta = keys[e.key];
+  if(!delta) return;
+  e.preventDefault();
+  const fine = e.ctrlKey || e.metaKey;
+  const step = fine ? SNAP_FINE : SNAP_COARSE;
+  const dx = delta[0]*step, dy = delta[1]*step;
+
+  if(activeId === "wp"){
+    if(wp.locked || !wp.visible) return;
+    wp.x = Math.max(0, Math.min(BED_W-wp.w, wp.x + dx));
+    wp.y = Math.max(0, Math.min(BED_H-wp.h, wp.y + dy));
+    updateStage(); renderLayerList(); scheduleWsSave();
+    return;
+  }
+  const d = activeDesign();
+  if(!d || d.locked || !d.visible) return;
+  const mm = designMM(d);
+  let nx = d.x + dx, ny = d.y + dy;
+  nx = Math.max(0, Math.min(BED_W-mm.w, nx));
+  ny = Math.max(0, Math.min(BED_H-mm.h, ny));
+  if(clipMode() === "constrain"){
+    const p = clampToWp(nx, ny, mm);
+    nx = p.x; ny = p.y;
+  }
+  d.x = nx; d.y = ny;
+  updateStage(); renderLayerList(); scheduleWsSave();
+});
+
+/////////////////////// settings ///////////////////////
+function collectSettingsFor(d){
+  return {
+    color_rules: d.palette.map(c => ({ color: c.color, op: d.colorOps[c.color] || "raster" })),
+    feed_mmps: num("feed", 180),
+    engrave_feed_mmps: num("efeed", 30),
+    cut_feed_mmps: num("cfeed", 10),
+    passes: parseInt($("passes").value) || 1,
+    engrave_passes: parseInt($("epasses").value) || 1,
+    cut_passes: parseInt($("cpasses").value) || 1,
+    raster_step_mils: parseInt($("rstep").value) || 2,
+    render_dpi: num("rdpi", 500),
+    dither: $("dither").checked,
+    invert: $("invert").checked,
+    bottom_up: $("bottomup").checked,
+    offset_x_mm: d.x,
+    offset_y_mm: d.y,
+    scale: d.scale,
+    clip: clipMode() === "clip" ? {
+      x_mm: wp.x - d.x,
+      y_mm: wp.y - d.y,
+      w_mm: wp.w,
+      h_mm: wp.h
+    } : null
+  };
+}
+function applyOpSettings(s){
+  if(!s) return;
+  if(s.feed_mmps != null) $("feed").value = s.feed_mmps;
+  if(s.engrave_feed_mmps != null) $("efeed").value = s.engrave_feed_mmps;
+  if(s.cut_feed_mmps != null) $("cfeed").value = s.cut_feed_mmps;
+  if(s.passes != null) $("passes").value = s.passes;
+  if(s.engrave_passes != null) $("epasses").value = s.engrave_passes;
+  if(s.cut_passes != null) $("cpasses").value = s.cut_passes;
+  if(s.raster_step_mils != null) $("rstep").value = s.raster_step_mils;
+  if(s.render_dpi != null) $("rdpi").value = s.render_dpi;
+  if(s.dither != null) $("dither").checked = !!s.dither;
+  if(s.invert != null) $("invert").checked = !!s.invert;
+  if(s.bottom_up != null) $("bottomup").checked = !!s.bottom_up;
+}
+
+/////////////////////// workspace ///////////////////////
+function collectWsState(){
+  return {
+    version: 2,
+    name: $("jobname").value,
+    clipmode,
+    workpiece: {
+      visible: wp.visible, x:wp.x, y:wp.y, w:wp.w, h:wp.h,
+      locked: wp.locked, expanded: wp.expanded, markers: wp.markers
+    },
+    activeId,
+    designs: designs.map(d => ({
+      id:d.id, name:d.name, svg:d.svg,
+      x:d.x, y:d.y, scale:d.scale,
+      visible:d.visible, locked:d.locked, expanded:d.expanded, markers:d.markers,
+      colorOps:d.colorOps
+    })),
+    // globale Op-Parameter (ohne Position)
+    settings: (()=>{
+      const s = collectSettingsFor(designs[0] || { x:0,y:0,scale:1,palette:[],colorOps:{} });
+      delete s.color_rules; delete s.offset_x_mm; delete s.offset_y_mm; delete s.scale; delete s.clip;
+      return s;
+    })()
+  };
+}
+let wsTimer = null;
+function scheduleWsSave(){
+  if(restoring) return;
+  clearTimeout(wsTimer);
+  wsTimer = setTimeout(()=> saveWorkspace(false), 800);
+}
+async function saveWorkspace(withSvg){
+  if(restoring) return;
+  try {
+    const state = collectWsState();
+    // primäres SVG: erstes Design (Abwärtskompatibilität)
+    await put("/api/workspace", {
+      svg: withSvg && designs[0] ? designs[0].svg : undefined,
+      state
+    });
+  } catch(e){}
+}
+document.addEventListener("input", e => {
+  if(e.target.closest("#view_lab")) scheduleWsSave();
+});
+document.addEventListener("change", e => {
+  if(e.target.closest("#view_lab")) scheduleWsSave();
+});
+
+async function applyWsState(st, legacySvg){
+  if(!st) return;
+  if(st.name) $("jobname").value = st.name;
+  applyOpSettings(st.settings);
+  if(st.clipmode) clipmode = st.clipmode;
+  if(st.workpiece){
+    const w = st.workpiece;
+    wp.visible = !!(w.visible ?? w.show);
+    wp.w = w.w ?? 120; wp.h = w.h ?? 80;
+    wp.x = w.x ?? 20; wp.y = w.y ?? 20;
+    wp.locked = !!w.locked;
+    wp.expanded = !!w.expanded;
+    wp.markers = !!w.markers;
+  }
+  // Version 2: mehrere Designs im State
+  if(st.designs && Array.isArray(st.designs) && st.designs.length){
+    for(const d of designs){ if(d.el) d.el.remove(); }
+    designs = [];
+    // reverse + unshift = Originalreihenfolge (erstes = oberster Layer)
+    for(const raw of [...st.designs].reverse()){
+      if(!raw.svg) continue;
+      await addDesignFromSvg(raw.svg, (raw.name || "design")+".svg", raw);
+    }
+    if(st.activeId) activeId = st.activeId;
+  } else if(legacySvg){
+    // Altformat: ein SVG + settings.offset/scale/colorOps
+    const restore = {
+      name: st.filename || st.name,
+      colorOps: st.colorOps,
+      x: st.settings && st.settings.offset_x_mm,
+      y: st.settings && st.settings.offset_y_mm,
+      scale: st.settings && st.settings.scale,
+      markers: !!st.markers
+    };
+    await addDesignFromSvg(legacySvg, (st.filename || "workspace")+".svg", restore);
+  }
+}
+
+$("btnreset").addEventListener("click", async ()=>{
+  if(!confirm(t("reset.confirm"))) return;
+  try { await api("/api/workspace", {method:"DELETE"}); } catch(e){}
+  location.reload();
+});
+
+/////////////////////// defaults ///////////////////////
+$("btndefaults").addEventListener("click", async ()=>{
+  const dummy = { x:0,y:0,scale:1,palette:[],colorOps:{} };
+  const d = collectSettingsFor(dummy);
+  delete d.color_rules; delete d.offset_x_mm; delete d.offset_y_mm; delete d.scale; delete d.clip;
+  try {
+    await put("/api/defaults", d);
+    toast(t("defaults.saved"));
+  } catch(e){ toast(e.message, true); }
+});
+
+/////////////////////// print queue ///////////////////////
+function printableDesigns(){
+  return designs.filter(d => {
+    if(!d.visible) return false;
+    return d.palette.some(c => (d.colorOps[c.color] || "raster") !== "ignore");
+  });
+}
+
+async function drainPrintQueue(){
+  if(!printQueue.length){ printBusy = false; return; }
+  if(deviceStatus.busy) return;
+  const job = printQueue.shift();
+  try {
+    const r = await post("/api/print", job);
+    job._estimate = r.estimate_s || 0;
+    // Gesamtschätzung: aktueller Job + Rest der Queue (noch ohne Slice-Werte → grob)
+    printEta.estimate_s = (r.estimate_s || 0) + printQueue.length * (r.estimate_s || 60);
+    toast(t("print.toast_active", {name: job.name, time: fmtTime(r.estimate_s)})
+      +(printQueue.length ? t("print.toast_queue", {n: printQueue.length}) : ""));
+  } catch(e){
+    printQueue = [];
+    printBusy = false;
+    printEta = { estimate_s:0, started_at:0, queue_total:0, queue_done:0 };
+    toast(e.message, true);
+  }
+}
+
+$("btnprint").addEventListener("click", async ()=>{
+  const list = printableDesigns();
+  if(!list.length){ toast(t("print.no_designs"), true); return; }
+  const summary = list.map(d => {
+    const mm = designMM(d);
+    return t("print.summary_line", {name: d.name, w: fmtMM(mm.w), h: fmtMM(mm.h), x: fmtMM(d.x), y: fmtMM(d.y)});
+  }).join("\n");
+  if(!confirm(t("print.confirm", {summary}))) return;
+
+  const btn = $("btnprint");
+  btn.disabled = true; btn.textContent = t("btn.slicing");
+  try {
+    // Grobe ETA: jedes Design einzeln anfragen wäre teuer – wir starten die Queue
+    // und summieren die Schätzungen aus den Antworten.
+    printQueue = list.map(d => ({
+      name: ($("jobname").value.trim() || d.name),
+      svg: d.svg,
+      settings: collectSettingsFor(d),
+      _estimate: 0
+    }));
+    // Namens-Suffix bei mehreren
+    if(printQueue.length > 1){
+      printQueue.forEach((j,i) => { j.name = j.name+" ("+(i+1)+"/"+printQueue.length+")"; });
+    }
+    printBusy = true;
+    printEta = {
+      estimate_s: 0,
+      started_at: Date.now(),
+      queue_total: printQueue.length,
+      queue_done: 0
+    };
+    await drainPrintQueue();
+  } catch(e){
+    toast(e.message, true);
+    printBusy = false;
+    printQueue = [];
+  } finally {
+    btn.textContent = t("btn.print");
+    applyStatus(deviceStatus);
+  }
+});
+
+$("btnsave").addEventListener("click", async ()=>{
+  const d = activeDesign() || designs[0];
+  if(!d) return;
+  const name = $("jobname").value.trim() || d.name;
+  if(!name){ toast(t("save.name_required"), true); return; }
+  const btn = $("btnsave");
+  btn.disabled = true; btn.textContent = t("btn.calculating");
+  try {
+    const meta = await post("/api/jobs", { name, svg: d.svg, settings: collectSettingsFor(d) });
+    toast(t("save.success", {name: meta.name, time: fmtTime(meta.estimate_s)}));
+  } catch(e){
+    toast(e.message, true);
+  } finally {
+    btn.disabled = false; btn.textContent = t("btn.save_project");
+  }
+});
+
+/////////////////////// projects ///////////////////////
+function jobBadges(settings){
+  const badges = [];
+  const ops = new Set();
+  if(settings.color_rules && settings.color_rules.length){
+    for(const r of settings.color_rules) ops.add(r.op);
+  } else if(settings.mode){
+    ops.add(settings.mode);
+  } else {
+    ops.add("raster");
+  }
+  if(ops.has("raster")) badges.push('<span class="badge r">'+t("projects.badge_raster")+'</span>');
+  if(ops.has("vector_engrave")) badges.push('<span class="badge">'+t("projects.badge_v_engrave")+'</span>');
+  if(ops.has("vector_cut")) badges.push('<span class="badge c">'+t("projects.badge_cut")+'</span>');
+  return badges.join("");
+}
+let jobsCache = [];
+async function loadJobs(){
+  try { jobsCache = await api("/api/jobs"); } catch(e){ return; }
+  const list = $("joblist");
+  list.innerHTML = "";
+  if(!jobsCache.length){
+    list.innerHTML = '<div class="empty">'+t("projects.empty")+'</div>';
+    return;
+  }
+  for(const j of jobsCache){
+    const el = document.createElement("div");
+    el.className = "job";
+    el.innerHTML = `
+      <img src="/api/jobs/${j.id}/preview.png" loading="lazy" alt="">
+      <div class="info">
+        <div class="name"></div>
+        <div class="meta">
+          ${t("projects.meta", {
+            badges: jobBadges(j.settings)+" ",
+            w: fmtMM(j.width_mm), h: fmtMM(j.height_mm),
+            x: fmtMM(j.settings.offset_x_mm), y: fmtMM(j.settings.offset_y_mm),
+            time: fmtTime(j.estimate_s)
+          })}
+        </div>
+        <div class="actions">
+          <button class="small primary" data-print>${t("projects.btn_print")}</button>
+          <button class="small" data-stage>${t("projects.btn_load_stage")}</button>
+          <button class="small" data-egv>${t("projects.btn_download_egv")}</button>
+          <button class="small" data-svg>${t("projects.btn_download_svg")}</button>
+          <button class="small" data-del>${t("projects.btn_delete")}</button>
+        </div>
+      </div>`;
+    el.querySelector(".name").textContent = j.name;
+    el.querySelector("[data-print]").addEventListener("click", ()=> openPrintDialog(j));
+    el.querySelector("[data-stage]").addEventListener("click", ()=> loadJobToStage(j));
+    el.querySelector("[data-egv]").addEventListener("click", ()=>{
+      location.href = "/api/jobs/"+j.id+"/download.egv";
+    });
+    el.querySelector("[data-svg]").addEventListener("click", ()=>{
+      const a = document.createElement("a");
+      a.href = "/api/jobs/"+j.id+"/source.svg";
+      a.download = j.name+".svg";
+      a.click();
+    });
+    el.querySelector("[data-del]").addEventListener("click", async ()=>{
+      if(!confirm(t("projects.delete_confirm", {name: j.name}))) return;
+      try { await api("/api/jobs/"+j.id, {method:"DELETE"}); loadJobs(); }
+      catch(e){ toast(e.message, true); }
+    });
+    list.appendChild(el);
+  }
+  refreshJobButtons();
+}
+async function loadJobToStage(j){
+  try {
+    const r = await fetch("/api/jobs/"+j.id+"/source.svg");
+    if(!r.ok) throw new Error(t("projects.source_not_found"));
+    const svg = await r.text();
+    const colorOps = {};
+    for(const rule of (j.settings.color_rules || [])) colorOps[rule.color] = rule.op;
+    applyOpSettings(j.settings);
+    $("jobname").value = j.name;
+    const restore = {
+      name: j.name,
+      colorOps,
+      x: j.settings.offset_x_mm ?? 10,
+      y: j.settings.offset_y_mm ?? 10,
+      scale: j.settings.scale ?? 1
+    };
+    if(await addDesignFromSvg(svg, j.name+".svg", restore)){
+      location.hash = "";
+      saveWorkspace(true);
+      toast(t("projects.load_success", {name: j.name}));
+    }
+  } catch(e){ toast(e.message, true); }
+}
+function refreshJobButtons(){
+  const canPrint = deviceStatus.state === "connected" && !deviceStatus.busy && !printBusy;
+  document.querySelectorAll("[data-print]").forEach(b => b.disabled = !canPrint);
+}
+let printJobId = null;
+function openPrintDialog(job){
+  printJobId = job.id;
+  $("printdlgname").textContent = job.name;
+  $("printpasses").value = 1;
+  $("printdlg").showModal();
+}
+$("printcancel").addEventListener("click", ()=> $("printdlg").close());
+$("printok").addEventListener("click", async ()=>{
+  $("printdlg").close();
+  try {
+    await post("/api/jobs/"+printJobId+"/print", { passes: parseInt($("printpasses").value)||1 });
+  } catch(e){ toast(e.message, true); }
+});
+
+/////////////////////// device buttons ///////////////////////
+function doHome(){ post("/api/device/home").catch(e=>toast(e.message,true)); }
+function doStop(){
+  printQueue = [];
+  printBusy = false;
+  printEta = { estimate_s:0, started_at:0, queue_total:0, queue_done:0 };
+  updateProgressUI(deviceStatus);
+  post("/api/device/stop").catch(e=>toast(e.message,true));
+}
+$("connpill").addEventListener("click", async ()=>{
+  if(deviceStatus.busy || printBusy) return;
+  const path = deviceStatus.state === "connected" ? "/api/device/disconnect" : "/api/device/connect";
+  try { await post(path); setTimeout(pollStatus, 400); } catch(e){ toast(e.message, true); }
+});
+$("btnhome").addEventListener("click", doHome);
+$("hdrhome").addEventListener("click", doHome);
+$("btnunlock").addEventListener("click", ()=> post("/api/device/unlock").catch(e=>toast(e.message,true)));
+$("btnstop").addEventListener("click", doStop);
+$("hdrstop").addEventListener("click", doStop);
+$("btnpause").addEventListener("click", ()=> post("/api/device/pause").catch(e=>toast(e.message,true)));
+["btnhome","btnunlock","hdrhome"].forEach(id => $(id).setAttribute("data-needsconn",""));
+document.querySelectorAll("[data-jog]").forEach(b => {
+  b.setAttribute("data-needsconn","");
+  b.addEventListener("click", ()=>{
+    const [sx,sy] = b.dataset.jog.split(",").map(Number);
+    const step = parseFloat($("jogstep").value);
+    post("/api/device/move", { dx_mm:sx*step, dy_mm:sy*step }).catch(e=>toast(e.message,true));
+  });
+});
+
+/////////////////////// theme & stage ///////////////////////
+const ICON_SUN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M4.9 4.9l1.6 1.6M17.5 17.5l1.6 1.6M19.1 4.9l-1.6 1.6M6.5 17.5l-1.6 1.6"/></svg>';
+const ICON_MOON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11z"/></svg>';
+function applyTheme(theme){
+  document.documentElement.dataset.theme = theme;
+  localStorage.setItem("rk40_theme", theme);
+  $("btntheme").innerHTML = theme === "light" ? ICON_MOON : ICON_SUN;
+  $("btntheme").title = theme === "light" ? t("title.theme_dark") : t("title.theme_light");
+}
+function applyBedTheme(b){
+  document.documentElement.dataset.bed = b;
+  localStorage.setItem("rk40_bed", b);
+}
+$("btntheme").addEventListener("click", () =>
+  applyTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light"));
+$("btnlang").addEventListener("click", () => setLang(lang === "de" ? "en" : "de"));
+$("bedtoggle").addEventListener("click", () =>
+  applyBedTheme(document.documentElement.dataset.bed === "light" ? "dark" : "light"));
+applyTheme(localStorage.getItem("rk40_theme") ||
+  (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"));
+applyBedTheme(localStorage.getItem("rk40_bed") || "light");
+
+/////////////////////// init ///////////////////////
+setInterval(() => {
+  if(deviceStatus.busy || printBusy) updateProgressUI(deviceStatus);
+}, 1000);
+
+(async function init(){
+  pollStatus();
+  connectSSE();
+  renderLayerList();
+
+  try {
+    const d = await api("/api/defaults");
+    if(d && typeof d === "object") applyOpSettings(d);
+  } catch(e){}
+
+  try {
+    const w = await api("/api/workspace");
+    if(w && w.state) await applyWsState(w.state, w.svg);
+    else if(w && w.svg) await applyWsState({}, w.svg);
+  } catch(e){}
+
+  restoring = false;
+  applyStaticI18n();
+  updateOpSections();
+  updateStage();
+  applyStatus(deviceStatus);
+  route();
+})();
+</script>
+</body>
+</html>

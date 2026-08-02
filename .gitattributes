@@ -1,0 +1,9 @@
+* text=auto eol=lf
+*.rs text eol=lf
+*.html text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+Cargo.lock text eol=lf
+*.png binary
+*.ico binary
+*.icns binary

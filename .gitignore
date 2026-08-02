@@ -1,0 +1,25 @@
+/target
+.DS_Store
+
+# Lokale Agent-/IDE-Daten (können absolute Pfade enthalten)
+.claude/
+.idea/
+.vscode/
+*.swp
+*~
+
+# Referenz-/Fork-Material — nicht Teil des öffentlichen rk40-Repos
+k40-whisperer/
+
+# Secrets und lokale Umgebung
+.env
+.env.*
+*.pem
+*.key
+credentials.json
+
+# Gelegentliche lokale Job-/Testdaten im Tree
+/.rk40/
+*.egv
+!examples/**
+/dist

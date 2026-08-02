@@ -1,0 +1,26 @@
+[package]
+name = "rk40"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+description = "Single-user web app to control a K40 laser cutter (M2 Nano / LHYMICRO-GL). Rust rewrite inspired by K40 Whisperer."
+readme = "README.md"
+repository = "https://github.com/corelgott/rk40"
+homepage = "https://github.com/corelgott/rk40"
+keywords = ["k40", "laser", "cnc", "usb"]
+categories = ["command-line-utilities", "multimedia"]
+
+[dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "sync", "time"] }
+axum = { version = "0.8", features = ["multipart"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+rusb = { version = "0.9", features = ["vendored"] }
+resvg = "0.45"
+uuid = { version = "1", features = ["v4"] }
+
+[profile.release]
+lto = true
+strip = true

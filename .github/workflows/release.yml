@@ -1,0 +1,117 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build-${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact: rk40-linux-x86_64
+            binary: rk40
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: rk40-windows-x86_64
+            binary: rk40.exe
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact: rk40-macos-aarch64
+            binary: rk40
+            package_app: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Build release
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Prepare artifact (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p dist
+          cp "target/${{ matrix.target }}/release/${{ matrix.binary }}" "dist/${{ matrix.artifact }}"
+          chmod +x "dist/${{ matrix.artifact }}"
+
+      - name: Prepare artifact (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp "target/${{ matrix.target }}/release/${{ matrix.binary }}" "dist/${{ matrix.artifact }}.exe"
+
+      - name: Package macOS .app
+        if: matrix.package_app
+        run: |
+          BINARY="target/${{ matrix.target }}/release/rk40" \
+            OUT_DIR=dist \
+            ./scripts/package-macos-app.sh
+          (
+            cd dist
+            zip -r "rk40-macos-aarch64.app.zip" rk40.app
+          )
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            dist/${{ matrix.artifact }}
+            dist/${{ matrix.artifact }}.exe
+            dist/rk40-macos-aarch64.app.zip
+          if-no-files-found: ignore
+
+  publish:
+    name: publish-release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+
+      - name: Flatten assets
+        run: |
+          mkdir -p upload
+          find release-assets -type f -print0 | while IFS= read -r -d '' f; do
+            cp "$f" "upload/$(basename "$f")"
+          done
+          ls -la upload
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: false
+          generate_release_notes: true
+          body: |
+            Binary-Releases für Windows, Linux und macOS.
+
+            **Herkunft:** Abgeleitet von [K40 Whisperer](https://www.scorchworks.com/K40whisperer/k40whisperer.html) (Scorch) — siehe NOTICE.
+
+            **macOS:** Die `.app` ist unsigniert. Beim ersten Start Rechtsklick → Öffnen, oder `xattr -cr rk40.app`. Details im README.
+
+            **USB:** Linux braucht ggf. eine udev-Regel; Windows Zadig (WinUSB/libusb). Siehe README.
+          files: upload/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

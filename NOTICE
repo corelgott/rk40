@@ -1,0 +1,36 @@
+rk40 — Credits und Herkunft
+===========================
+
+rk40 ist eine unabhängige Rust-Neuimplementierung zur Steuerung von K40-
+Laser-Cuttern (M2-Nano / LHYMICRO-GL). Es ist kein offizielles Produkt von
+Scorch / Scorchworks.
+
+Upstream
+--------
+
+K40 Whisperer von Scorch (scorchworks.com)
+  https://www.scorchworks.com/K40whisperer/k40whisperer.html
+
+Protokoll-Kern, USB-Treiber und Speed-Codes in rk40 basieren auf dem
+öffentlichen Quellcode von K40 Whisperer und wurden portiert bzw. gegen
+dessen Ausgaben verifiziert.
+
+Portierte bzw. abgeleitete Bestandteile
+---------------------------------------
+
+  src/egv.rs          — Port von egv.py (GPL)
+  src/device.rs       — Port von nano_library.py (GPL)
+  src/laser_speed.rs  — Port von LaserSpeed.py
+                        (im Original als MIT-lizenzierter Abschnitt
+                        gekennzeichnet; im rk40-Gesamtwerk unter GPL-3.0+)
+  src/planner.rs      — Raster-/Vektor-Planung angelehnt an die Logik
+                        von K40 Whisperer (Koordinaten, Multi-Pass)
+
+Lizenz
+------
+
+rk40 steht unter der GNU General Public License Version 3 oder neuer.
+Siehe die Datei LICENSE.
+
+K40 Whisperer steht unter der GPL; die Nutzung und Portierung des
+Protokoll-Codes folgt dieser Lizenzpflicht.
