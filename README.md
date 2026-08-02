@@ -1,183 +1,180 @@
 # rk40
 
-> **Abgeleitet von [K40 Whisperer](https://www.scorchworks.com/K40whisperer/k40whisperer.html)**
-> von Scorch (scorchworks.com). Rust-Neuimplementierung des Protokoll- und
-> Steuerkerns — **kein offizielles Scorch-Projekt**. Details: [NOTICE](NOTICE).
+[Deutsch](README.de.md)
 
-Single-User-Webserver zur Steuerung eines **K40 Laser-Cutters** (M2-Nano-Board,
-LHYMICRO-GL-Protokoll) — geschrieben in Rust.
+> **Derived from [K40 Whisperer](https://www.scorchworks.com/K40whisperer/k40whisperer.html)**
+> by Scorch (scorchworks.com). A Rust reimplementation of the protocol and
+> control core — **not an official Scorch project**. See [NOTICE](NOTICE).
 
-Ein einzelnes Binary ohne Laufzeit-Abhängigkeiten: Webserver, SVG-Slicer,
-USB-Treiber und Weboberfläche sind eingebaut. Läuft auf **macOS, Linux und
+Single-user web server for driving a **K40 laser cutter** (M2 Nano board,
+LHYMICRO-GL protocol), written in Rust.
+
+One self-contained binary with no runtime dependencies: web server, SVG
+slicer, USB driver, and UI are all built in. Runs on **macOS, Linux, and
 Windows**.
 
-## Funktionen
+![rk40 web UI with work area and color-mapped SVG](docs/screenshots/rk40-gui.png)
 
-- **SVG laden & slicen** – SVGs werden direkt gerendert (kein Inkscape nötig)
-  und in fertige EGV-Daten für das M2-Nano-Board übersetzt.
-- **Raster-Gravur** – Scanline-Gravur mit wählbarem Zeilenabstand
-  (0,025–0,1 mm), Auflösung, optionalem Floyd-Steinberg-Dithering und
-  Invertierung.
-- **Vektor-Gravur & Vektor-Schnitt** – Pfade werden mit hoher Genauigkeit
-  abgeflacht und als Cut-Linien gefahren.
-- **Farb-Zuordnung** – Die Farben des SVGs werden erkannt; pro Farbe wählbar:
-  Gravur (Raster), Vektor-Gravur, Schnitt oder Ignorieren
-  (Voreinstellung: Rot `#ff0000` = Schnitt, Blau `#0000ff` = Vektor-Gravur,
-  Rest = Gravur — wie bei K40 Whisperer). Ein Job kombiniert alle Operationen
-  in der Reihenfolge Gravur → Vektor-Gravur → Schnitt, mit eigenem Tempo und
-  eigenen Durchgängen pro Operation.
-- **Skalierung** – per Zielmaß (Breite/Höhe in mm), Faktor oder direkt am
-  Eck-Anfasser auf der Arbeitsfläche.
-- **Hell/Dunkel** – umschaltbares Design im Header (folgt initial der
-  System-Einstellung) und separat umschaltbarer Hintergrund der Arbeitsfläche
-  („Fläche“) — standardmäßig hell, damit schwarze SVGs gut sichtbar sind.
-  Beides wird im Browser gemerkt.
-- **Direkt drucken oder als Projekt speichern** – „Drucken“ sliced und startet
-  in einem Schritt; „Als Projekt speichern“ legt den fertig berechneten Job
-  (`egv.bin`) in der Projektliste ab — erneutes Drucken braucht die SVG nicht
-  mehr. Projekte lassen sich als `.egv` (K40-Whisperer-kompatibel) und `.svg`
-  herunterladen und jederzeit wieder auf die Stage laden.
-- **Arbeitskopie auf dem Server** – Stage, SVG, Position und alle Parameter
-  überleben Seiten-Reload und Server-Neustart; „Stage zurücksetzen“ räumt auf.
-  Die Parameter-Defaults sind über die GUI änderbar und werden serverseitig
-  gespeichert.
-- **Positions-Marker & Werkstück** – Kleine Ecken-Marker der Design-Bounding-Box
-  lassen sich separat lasern (z. B. auf eine Unterlage), um das Werkstück exakt
-  zu platzieren; der Werkstück-Umriss kann als sperrbares Rechteck auf der
-  Arbeitsfläche angezeigt werden.
-- **Multi-Pass ohne erneutes Nullen** – Mehrere Durchgänge laufen direkt
-  hintereinander; zwischen den Passes wird *nicht* die Home-Position
-  angefahren.
-- **Offline-Betrieb** – SVGs können ohne angeschlossenen Laser vorbereitet,
-  gespeichert und in der Vorschau geprüft werden.
-- **Laser-Steuerung im Browser** – Home, Entriegeln, Not-Stopp, Pause,
-  Jog-Steuerung, Live-Fortschritt (SSE), Platzierung per Drag auf der
-  300 × 200-mm-Arbeitsfläche.
+## Features
 
-## Installation (Binary-Releases)
+- **Load & slice SVG** – SVGs are rendered directly (no Inkscape required)
+  and translated into EGV data for the M2 Nano board.
+- **Raster engraving** – Scanline engraving with selectable line spacing
+  (0.025–0.1 mm), resolution, optional Floyd–Steinberg dithering, and
+  inversion.
+- **Vector engrave & vector cut** – Paths are flattened at high precision
+  and run as cut lines.
+- **Color mapping** – SVG colors are detected; per color you can choose
+  raster engrave, vector engrave, cut, or ignore
+  (defaults: red `#ff0000` = cut, blue `#0000ff` = vector engrave,
+  everything else = raster — same as K40 Whisperer). A job combines all
+  operations in order engrave → vector engrave → cut, with its own speed
+  and pass count per operation.
+- **Scaling** – by target size (width/height in mm), factor, or by dragging
+  a corner handle on the bed.
+- **Light/dark UI** – theme toggle in the header (follows the system
+  preference initially) and a separate bed-background toggle — light by
+  default so black SVGs stay visible. Both are remembered in the browser.
+- **Print now or save as project** – “Print” slices and starts in one step;
+  “Save as project” stores the computed job (`egv.bin`) in the project list
+  so reprints do not need the SVG again. Projects can be downloaded as
+  `.egv` (K40 Whisperer–compatible) and `.svg`, and reloaded onto the stage
+  at any time.
+- **Server-side working copy** – stage, SVG, position, and all parameters
+  survive page reloads and server restarts; “Reset stage” clears them.
+  Parameter defaults are editable in the UI and stored on the server.
+- **Position markers & workpiece** – small corner markers of the design
+  bounding box can be lasered separately (e.g. onto a fixture) for precise
+  workpiece placement; the workpiece outline can be shown as a lockable
+  rectangle on the bed.
+- **Multi-pass without re-homing** – passes run back-to-back; the head does
+  *not* return to home between passes.
+- **Offline use** – prepare, save, and preview SVGs without a laser
+  connected.
+- **In-browser laser control** – home, unfreeze, e-stop, pause, jog,
+  live progress (SSE), drag-to-place on the 300 × 200 mm bed.
 
-Vorgefertigte Builds erscheinen unter
-[Releases](https://github.com/corelgott/rk40/releases), sobald ein Versions-Tag
-gesetzt wird (z. B. `v0.1.0`). Binary-Builds laufen **nur bei Tags** `v*`,
-nicht bei jedem Push.
+## Installation (binary releases)
+
+Pre-built binaries are published under
+[Releases](https://github.com/corelgott/rk40/releases) when a version tag
+is pushed (e.g. `v0.1.0`). Binary builds run **only on tags** matching
+`v*`, not on every push.
 
 ```bash
 git tag v0.1.0
 git push origin v0.1.0
 ```
 
-Artefakte pro Plattform: Linux- und Windows-Binary, macOS-Binary sowie eine
-unsignierte `rk40.app` (siehe unten).
+Artifacts per platform: Linux and Windows binaries, a macOS binary, and an
+unsigned `rk40.app` (see below). Tags containing `rc` / `alpha` / `beta` /
+`pre` are published as GitHub pre-releases.
 
-## Bauen
+## Building
 
-Voraussetzung: [Rust](https://rustup.rs) (stable). Die USB-Bibliothek
-(libusb) wird mitkompiliert (`vendored`), es sind keine System-Pakete nötig —
-nur unter Linux wird `pkg-config`/Build-Tools vorausgesetzt.
+Requires [Rust](https://rustup.rs) (stable). The USB library (libusb) is
+compiled in (`vendored`); no system packages are needed — except on Linux,
+where `pkg-config` / build tools are expected.
 
 ```bash
 cargo build --release
 ./target/release/rk40 --port 8040
 ```
 
-Dann im Browser: <http://localhost:8040>
+Then open <http://localhost:8040> in a browser.
 
-| Option | Bedeutung | Default |
+| Option | Meaning | Default |
 |---|---|---|
-| `--port`, `-p` | HTTP-Port | `8040` |
-| `--data-dir`, `-d` | Ablage für gespeicherte Jobs | `~/.rk40` |
+| `--port`, `-p` | HTTP port | `8040` |
+| `--data-dir`, `-d` | Storage for saved jobs | `~/.rk40` |
 
-### USB-Zugriff
+### USB access
 
-Der K40 meldet sich als USB-Gerät `1a86:5512` (CH341).
+The K40 appears as USB device `1a86:5512` (CH341).
 
-- **macOS**: funktioniert direkt, keine Treiber nötig.
-- **Linux**: der `ch341`-Kernel-Treiber wird automatisch abgekoppelt.
-  Für den Zugriff ohne root eine udev-Regel anlegen:
+- **macOS**: works out of the box; no drivers needed.
+- **Linux**: the `ch341` kernel driver is detached automatically.
+  For access without root, add a udev rule:
   ```
   # /etc/udev/rules.d/99-k40.rules
   SUBSYSTEM=="usb", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="5512", MODE="0666"
   ```
-- **Windows**: mit [Zadig](https://zadig.akeo.ie) den *libusb-win32*- oder
-  *WinUSB*-Treiber für das Gerät installieren (wie bei K40 Whisperer).
+- **Windows**: use [Zadig](https://zadig.akeo.ie) to install the
+  *libusb-win32* or *WinUSB* driver for the device (same as K40 Whisperer).
 
-### macOS: unsignierte App freigeben
+### macOS: allowing the unsigned app
 
-Die Release-Datei `rk40-macos-*.app.zip` enthält eine unsignierte `.app`
-(ohne Apple Developer ID). Gatekeeper blockiert den ersten Start — das ist
-erwartet.
+The release file `rk40-macos-*.app.zip` contains an unsigned `.app`
+(no Apple Developer ID). Gatekeeper blocks the first launch — that is
+expected.
 
-1. Zip entpacken.
-2. **Rechtsklick** auf `rk40.app` → **Öffnen** → im Dialog bestätigen.
-3. Falls nötig: *Systemeinstellungen* → *Datenschutz & Sicherheit* →
-   „Trotzdem öffnen“.
-4. Alternativ Quarantäne-Flag entfernen:
+1. Unzip the archive.
+2. **Right-click** `rk40.app` → **Open** → confirm the dialog.
+3. If needed: *System Settings* → *Privacy & Security* → “Open Anyway”.
+4. Or clear the quarantine flag:
    ```bash
    xattr -cr rk40.app
    ```
 
-Die App startet den lokalen Server und öffnet den Browser unter
-<http://localhost:8040>. Zum Beenden die App im Dock beenden (oder den
-Prozess im Activity Monitor).
+The app starts the local server and opens the browser at
+<http://localhost:8040>. Quit via the Dock (or Activity Monitor).
 
-Lokal selbst bauen:
+Build the bundle locally:
 
 ```bash
 cargo build --release
 ./scripts/package-macos-app.sh
 ```
 
-## Arbeitsablauf
+## Workflow
 
-1. **SVG laden** (Drag & Drop), auf der Arbeitsfläche platzieren.
-2. Modus, Tempo, Durchgänge etc. wählen und **„Vorbereiten & Speichern“** —
-   der Job wird gesliced und landet in der Bibliothek.
-3. Laser **verbinden**, Kopf mit **Home** nullen.
-4. **Drucken** — die Position ist im Job eingerechnet; der Kopf fährt vom
-   Home-Punkt los und kehrt danach zurück. Der Job kann beliebig oft
-   wiederholt werden.
+1. **Load an SVG** (drag & drop) and place it on the bed.
+2. Choose mode, speed, passes, etc., then **Prepare & Save** — the job is
+   sliced into the library.
+3. **Connect** the laser and **Home** the head.
+4. **Print** — placement is baked into the job; the head starts from home
+   and returns afterward. The job can be repeated as often as you like.
 
-> **Hinweis Leistung:** Das M2-Nano-Board kann die Laserleistung nicht per
-> Software regeln — sie wird wie gewohnt am Potentiometer des K40 eingestellt.
+> **Power note:** The M2 Nano cannot set laser power in software — use the
+> K40’s potentiometer as usual.
 
-## Zuverlässigkeit während des Jobs
+## Reliability during a job
 
-Der K40 hat nur einen winzigen Puffer — reißt der USB-Datenstrom ab, bleibt
-der Kopf mitten im Job stehen. rk40 schützt dagegen:
+The K40 has a tiny buffer — if the USB stream stalls, the head stops mid-
+job. rk40 mitigates that:
 
-- **Schlaf-Sperre**: Während ein Job läuft, verhindert rk40 den Ruhezustand
-  des Rechners (macOS: `caffeinate`, Linux: `systemd-inhibit`). Unter Windows
-  bitte den Energiesparmodus für die Dauer des Jobs deaktivieren.
-- **USB-Reconnect**: Bei USB-Aussetzern (beim K40 häufig durch
-  Einstreuungen des Laser-Netzteils) verbindet rk40 das Gerät automatisch neu
-  und setzt die Übertragung fort — aufgegeben wird erst nach ~2 Minuten.
-- **Sichtbare Fehler**: Bricht ein Job doch ab, erscheint ein rotes Banner
-  mit dem Grund; Details landen zusätzlich im Server-Log (stderr).
+- **Sleep inhibition**: while a job runs, rk40 keeps the machine awake
+  (macOS: `caffeinate`, Linux: `systemd-inhibit`). On Windows, disable sleep
+  for the duration of the job.
+- **USB reconnect**: on USB dropouts (common on K40s from PSU EMI), rk40
+  reopens the device and continues — it gives up only after ~2 minutes.
+- **Visible errors**: if a job still aborts, a red banner shows the reason;
+  details also go to the server log (stderr).
 
-Wenn Jobs wiederholt mitten drin abbrechen: kurzes, gut geschirmtes USB-Kabel
-mit Ferritkern verwenden, nicht über einen Hub gehen, und den K40 gut erden —
-das sind die üblichen Ursachen bei diesen Geräten.
+If jobs keep failing mid-run: use a short, well-shielded USB cable with a
+ferrite, avoid hubs, and ground the K40 properly — the usual fixes for
+these machines.
 
-## Architektur
+## Architecture
 
 ```
 src/
-├── main.rs         Serverstart, CLI-Argumente
-├── api.rs          REST-API + SSE + eingebettete SPA
-├── device.rs       USB-Treiber (rusb): Pakete, CRC, Statuscodes, Job-Loop
-├── egv.rs          EGV/LHYMICRO-GL-Encoder (Port von egv.py)
-├── laser_speed.rs  Speed-Codes (Port von LaserSpeed.py, M2-Board)
-├── planner.rs      SVG → Scanlines/Polylinien → EGV (resvg, Dithering)
-└── jobs.rs         Job-Ablage (meta.json, egv.bin, preview.png, source.svg)
-static/index.html   Single-Page-App (Vanilla JS, keine Build-Tools)
+├── main.rs         Server start, CLI args
+├── api.rs          REST API + SSE + embedded SPA
+├── device.rs       USB driver (rusb): packets, CRC, status codes, job loop
+├── egv.rs          EGV / LHYMICRO-GL encoder (port of egv.py)
+├── laser_speed.rs  Speed codes (port of LaserSpeed.py, M2 board)
+├── planner.rs      SVG → scanlines/polylines → EGV (resvg, dithering)
+└── jobs.rs         Job store (meta.json, egv.bin, preview.png, source.svg)
+static/index.html   Single-page app (vanilla JS, no build tools)
 ```
 
-Der Protokoll-Kern ist gegen das Original verifiziert: identische Eingaben
-erzeugen **byte-identische** EGV-Ströme wie `egv.py` aus K40 Whisperer
-(siehe `examples/dump_egv.rs`), die Speed-Codes sind gegen `LaserSpeed.py`
-getestet (`cargo test`).
+The protocol core is verified against the original: identical inputs produce
+**byte-identical** EGV streams to K40 Whisperer’s `egv.py`
+(see `examples/dump_egv.rs`); speed codes are tested against `LaserSpeed.py`
+(`cargo test`).
 
-## Lizenz
+## License
 
-GPL-3.0-or-later — siehe [LICENSE](LICENSE) und [NOTICE](NOTICE).
-Abgeleitet von K40 Whisperer, © Scorch (scorchworks.com).
+GPL-3.0-or-later — see [LICENSE](LICENSE) and [NOTICE](NOTICE).
+Derived from K40 Whisperer, © Scorch (scorchworks.com).
