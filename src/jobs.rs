@@ -104,6 +104,7 @@ impl JobStore {
         Some(self.dir.join(id))
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn create(
         &self,
         name: &str,
@@ -150,7 +151,7 @@ impl JobStore {
                 }
             }
         }
-        jobs.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        jobs.sort_by_key(|b| std::cmp::Reverse(b.created_at));
         jobs
     }
 

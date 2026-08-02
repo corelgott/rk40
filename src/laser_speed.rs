@@ -52,14 +52,12 @@ fn get_gear_for_speed(mm_per_second: f64, uses_raster_step: bool) -> u8 {
         } else {
             4
         }
+    } else if mm_per_second < 127.0 {
+        2
+    } else if mm_per_second <= 320.0 {
+        3
     } else {
-        if mm_per_second < 127.0 {
-            2
-        } else if mm_per_second <= 320.0 {
-            3
-        } else {
-            4
-        }
+        4
     }
 }
 
@@ -92,10 +90,8 @@ fn get_gearing(board: Board, mm_per_second: f64, uses_raster_step: bool) -> (f64
                 return (b_values[0], m, 0);
             }
         }
-        Board::M2 => {
-            if mm_per_second < 7.0 {
-                return (65528.0, m / 12.0, 0);
-            }
+        Board::M2 if mm_per_second < 7.0 => {
+            return (65528.0, m / 12.0, 0);
         }
         _ => {}
     }

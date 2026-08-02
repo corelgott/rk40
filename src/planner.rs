@@ -22,9 +22,10 @@ fn svg_options() -> usvg::Options<'static> {
             Arc::new(db)
         })
         .clone();
-    let mut opt = usvg::Options::default();
-    opt.fontdb = db;
-    opt
+    usvg::Options {
+        fontdb: db,
+        ..Default::default()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -717,7 +718,7 @@ fn nearest_color(palette: &[(u8, u8, u8)], c: (u8, u8, u8)) -> Option<(u8, u8, u
         let dg = p.1 as i64 - c.1 as i64;
         let db = p.2 as i64 - c.2 as i64;
         let d = dr * dr + dg * dg + db * db;
-        if best.map_or(true, |(_, bd)| d < bd) {
+        if best.is_none_or(|(_, bd)| d < bd) {
             best = Some((p, d));
         }
     }
@@ -862,7 +863,7 @@ fn clip_polylines(lines: &[Vec<(f64, f64)>], r: (f64, f64, f64, f64)) -> Vec<Vec
                 Some((a, b)) => {
                     let continues = cur
                         .last()
-                        .map_or(false, |&l| (l.0 - a.0).abs() < eps && (l.1 - a.1).abs() < eps);
+                        .is_some_and(|&l| (l.0 - a.0).abs() < eps && (l.1 - a.1).abs() < eps);
                     if !continues {
                         if cur.len() > 1 {
                             out.push(std::mem::take(&mut cur));

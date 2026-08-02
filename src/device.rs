@@ -76,14 +76,14 @@ pub fn packetize(data: &[u8], passes: u32) -> Vec<[u8; 34]> {
         if passes > 1 && len >= 4 {
             data[len - 4] = if j == passes - 1 { b'F' } else { b'@' };
         }
-        for i in istart..len {
+        for &byte in &data[istart..len] {
             if cnt > 31 {
                 packet[33] = one_wire_crc(&packet[1..32]);
                 packets.push(packet);
                 packet = blank;
                 cnt = 2;
             }
-            packet[cnt] = data[i];
+            packet[cnt] = byte;
             cnt += 1;
         }
     }
@@ -454,7 +454,7 @@ impl Worker {
     /// no handshake — the board may be in a confused state.
     fn send_unfreeze(&mut self) {
         std::thread::sleep(Duration::from_millis(100));
-        for p in packetize(&[b'F', b'N', b'S', b'E'], 1) {
+        for p in packetize(b"FNSE", 1) {
             let _ = self.write_packet(&p);
         }
     }
@@ -534,7 +534,7 @@ impl Worker {
         }
         if self.pause_flag.load(Ordering::SeqCst) {
             // send pause (P N as its own mini transmission)
-            let pn = packetize(&[b'P', b'N'], 1);
+            let pn = packetize(b"PN", 1);
             for p in &pn {
                 let _ = self.send_packet_checked(p);
             }
@@ -596,7 +596,7 @@ impl Worker {
                 }
                 // like K40 Whisperer: after repeated timeouts re-initialize
                 // the USB device and keep going (EMI drops, hub hiccups, …)
-                if timeout_cnt % 20 == 0 {
+                if timeout_cnt.is_multiple_of(20) {
                     self.set_status(|s| {
                         s.message = "USB-Verbindung wird neu aufgebaut…".into();
                     });
