@@ -13,7 +13,7 @@ Ein einzelnes Binary ohne Laufzeit-Abhängigkeiten: Webserver, SVG-Slicer,
 USB-Treiber und Weboberfläche sind eingebaut. Läuft auf **macOS, Linux und
 Windows**.
 
-![rk40 Weboberfläche mit Arbeitsfläche und farbgemapptem SVG](docs/screenshots/rk40-gui.png)
+![rk40 Weboberfläche mit Arbeitsfläche und farbgemapptem SVG](docs/screenshots/rk40-ui.png)
 
 ## Funktionen
 

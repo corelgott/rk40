@@ -13,7 +13,7 @@ One self-contained binary with no runtime dependencies: web server, SVG
 slicer, USB driver, and UI are all built in. Runs on **macOS, Linux, and
 Windows**.
 
-![rk40 web UI with work area and color-mapped SVG](docs/screenshots/rk40-gui.png)
+![rk40 web UI with work area and color-mapped SVG](docs/screenshots/rk40-ui.png)
 
 ## Features
 
