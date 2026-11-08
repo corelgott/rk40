@@ -12,6 +12,12 @@ use std::sync::{Arc, OnceLock};
 
 const MM_PER_INCH: f64 = 25.4;
 
+/// Usable bed size (K40). The head cannot travel outside this area, so any
+/// design content placed beyond it (e.g. a negative placement offset) is
+/// clipped away during planning instead of being sent to the controller.
+pub const BED_W_MM: f64 = 300.0;
+pub const BED_H_MM: f64 = 200.0;
+
 /// usvg options with system fonts loaded (once), so <text> elements work.
 fn svg_options() -> usvg::Options<'static> {
     static DB: OnceLock<Arc<usvg::fontdb::Database>> = OnceLock::new();
@@ -382,6 +388,43 @@ pub fn plan_svg(svg_text: &str, settings: &PrepareSettings) -> Result<PlannedJob
         return Err("SVG hat keine Größe".to_string());
     }
 
+    // The design may be placed partly outside the bed (negative offset or
+    // overhang past the far edge). The head cannot travel there, so whatever
+    // lies outside the machine area must never reach the EGV: fold the bed
+    // into the clip window.
+    let bed = ClipRect {
+        x_mm: -settings.offset_x_mm,
+        y_mm: -settings.offset_y_mm,
+        w_mm: BED_W_MM,
+        h_mm: BED_H_MM,
+    };
+    let overhang = settings.offset_x_mm < 0.0
+        || settings.offset_y_mm < 0.0
+        || settings.offset_x_mm + width_mm > BED_W_MM
+        || settings.offset_y_mm + height_mm > BED_H_MM;
+    let effective_clip = match (settings.clip, overhang) {
+        (Some(c), true) => Some(intersect_clip(c, bed)),
+        (Some(c), false) => Some(c),
+        (None, true) => Some(bed),
+        (None, false) => None,
+    };
+    if overhang
+        && effective_clip.is_some_and(|c| {
+            c.w_mm <= 0.0
+                || c.h_mm <= 0.0
+                || c.x_mm >= width_mm
+                || c.y_mm >= height_mm
+                || c.x_mm + c.w_mm <= 0.0
+                || c.y_mm + c.h_mm <= 0.0
+        })
+    {
+        return Err("Design liegt vollständig außerhalb der Arbeitsfläche".to_string());
+    }
+    let settings = &PrepareSettings {
+        clip: effective_clip,
+        ..settings.clone()
+    };
+
     let rules = RuleSet::from_settings(settings);
     let height_in = height_mm / MM_PER_INCH;
     // Head start: top-left of the design; placement offset baked in.
@@ -493,6 +536,16 @@ pub fn plan_markers(
     if w_mm <= 0.0 || h_mm <= 0.0 {
         return Err("Ungültige Markergröße".to_string());
     }
+    // A box may extend beyond the bed (negative placement); the head cannot
+    // laser there, so clamp the marker rectangle to the machine area.
+    let x1 = (x_mm + w_mm).min(BED_W_MM);
+    let y1 = (y_mm + h_mm).min(BED_H_MM);
+    let x_mm = x_mm.max(0.0);
+    let y_mm = y_mm.max(0.0);
+    let (w_mm, h_mm) = (x1 - x_mm, y1 - y_mm);
+    if w_mm <= 0.0 || h_mm <= 0.0 {
+        return Err("Markerbereich liegt außerhalb der Arbeitsfläche".to_string());
+    }
     // arm length: 4 mm, capped for tiny designs
     let arm = 4.0f64.min(w_mm / 3.0).min(h_mm / 3.0).max(0.5);
 
@@ -522,6 +575,21 @@ pub fn plan_markers(
     let mut data = vec![b'I'];
     data.extend(egv.data);
     Ok(data)
+}
+
+/// Intersection of two clip rects; width/height can come out non-positive
+/// when they do not overlap.
+fn intersect_clip(a: ClipRect, b: ClipRect) -> ClipRect {
+    let x0 = a.x_mm.max(b.x_mm);
+    let y0 = a.y_mm.max(b.y_mm);
+    let x1 = (a.x_mm + a.w_mm).min(b.x_mm + b.w_mm);
+    let y1 = (a.y_mm + a.h_mm).min(b.y_mm + b.h_mm);
+    ClipRect {
+        x_mm: x0,
+        y_mm: y0,
+        w_mm: x1 - x0,
+        h_mm: y1 - y0,
+    }
 }
 
 /// Append an operation block `passes` times; rewrites the previous footer 'F'
@@ -1313,6 +1381,54 @@ mod tests {
         // crossing: clipped at both ends
         let (a, b) = clip_segment((-5.0, 5.0), (15.0, 5.0), r).unwrap();
         assert_eq!((a.0, b.0), (0.0, 10.0));
+    }
+
+    #[test]
+    fn negative_offset_clips_to_bed() {
+        // design placed partly left/above home: the overhang must be clipped,
+        // so the job shrinks compared to full placement
+        let mut s = settings();
+        s.offset_x_mm = -10.0;
+        s.offset_y_mm = -5.0;
+        let job_neg = plan_svg(TEST_SVG, &s).unwrap();
+        let job_full = plan_svg(TEST_SVG, &settings()).unwrap();
+        assert!(
+            job_neg.estimate_s < job_full.estimate_s,
+            "clipped job ({}) not smaller than full job ({})",
+            job_neg.estimate_s,
+            job_full.estimate_s
+        );
+
+        // fully outside the bed -> clear error
+        s.offset_x_mm = -400.0;
+        assert!(plan_svg(TEST_SVG, &s).is_err());
+
+        // overhang past the far edge is clipped too
+        let mut s2 = settings();
+        s2.offset_x_mm = BED_W_MM - 10.0;
+        let job_right = plan_svg(TEST_SVG, &s2).unwrap();
+        assert!(job_right.estimate_s < job_full.estimate_s);
+    }
+
+    #[test]
+    fn negative_offset_combines_with_workpiece_clip() {
+        let mut s = settings();
+        s.offset_x_mm = -10.0;
+        // workpiece window covering the whole design: bed clip must still apply
+        s.clip = Some(ClipRect { x_mm: -5.0, y_mm: -5.0, w_mm: 40.0, h_mm: 40.0 });
+        let job = plan_svg(TEST_SVG, &s).unwrap();
+        let mut s_full = settings();
+        s_full.clip = s.clip;
+        let job_full = plan_svg(TEST_SVG, &s_full).unwrap();
+        assert!(job.estimate_s < job_full.estimate_s);
+    }
+
+    #[test]
+    fn markers_clamped_to_bed() {
+        // box partly outside: clamped, still valid
+        assert!(plan_markers(-10.0, -10.0, 30.0, 30.0, 100.0).is_ok());
+        // box fully outside: error
+        assert!(plan_markers(-50.0, 0.0, 30.0, 30.0, 100.0).is_err());
     }
 
     #[test]

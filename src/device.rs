@@ -117,6 +117,9 @@ pub struct DeviceStatus {
     /// Estimated head position in mils relative to home (x right, y down)
     pub pos_x_mils: i64,
     pub pos_y_mils: i64,
+    /// Whether the estimate can be trusted: only after homing. Connecting,
+    /// unlocking the axes (head moved by hand) or an aborted job lose it.
+    pub pos_known: bool,
 }
 
 impl Default for DeviceStatus {
@@ -131,6 +134,7 @@ impl Default for DeviceStatus {
             error: None,
             pos_x_mils: 0,
             pos_y_mils: 0,
+            pos_known: false,
         }
     }
 }
@@ -184,8 +188,10 @@ pub enum Command {
     Home,
     Unlock,
     PauseToggle,
-    /// dx, dy in mils (x right, y down in machine/user terms)
-    RapidMove(i64, i64),
+    /// dx, dy in mils (x right, y down in machine/user terms); optional feed
+    /// in mm/s — when set, the move runs speed-limited instead of at the
+    /// board's full rapid speed (jog compensation)
+    RapidMove(i64, i64, Option<f64>),
     /// name, single-pass EGV data, passes
     RunJob(String, Vec<u8>, u32),
 }
@@ -295,6 +301,8 @@ impl Worker {
                 Ok(()) => self.set_status(|s| {
                     s.state = ConnState::Connected;
                     s.message = "Verbunden".into();
+                    // the head may be anywhere after (re)connecting
+                    s.pos_known = false;
                 }),
                 Err(e) => {
                     self.usb = None;
@@ -317,6 +325,7 @@ impl Worker {
                         s.message = "Home-Position wird angefahren".into();
                         s.pos_x_mils = 0;
                         s.pos_y_mils = 0;
+                        s.pos_known = true;
                     });
                 }
             }
@@ -325,7 +334,11 @@ impl Worker {
                 // until it gets an FNSE (K40 Whisperer's "unfreeze")
                 self.send_unfreeze();
                 if self.send_raw(&UNLOCK).is_ok() {
-                    self.set_status(|s| s.message = "Achsen entriegelt".into());
+                    self.set_status(|s| {
+                        s.message = "Achsen entriegelt".into();
+                        // unlocked axes can be pushed by hand
+                        s.pos_known = false;
+                    });
                 }
             }
             Command::PauseToggle => {
@@ -333,10 +346,15 @@ impl Worker {
                 let data = vec![b'P', b'N'];
                 let _ = self.send_data(&data, 1, None);
             }
-            Command::RapidMove(dx, dy) => {
+            Command::RapidMove(dx, dy, feed) => {
                 // machine y up is positive in EGV; user dy>0 means down
                 let mut egv = Egv::new();
-                egv.make_move_data(dx, -dy);
+                match feed {
+                    Some(f) if f > 0.0 => {
+                        egv.make_slow_move_data(dx, -dy, f, crate::laser_speed::Board::M2)
+                    }
+                    _ => egv.make_move_data(dx, -dy),
+                }
                 if egv.data.is_empty() {
                     return;
                 }
@@ -363,7 +381,20 @@ impl Worker {
                 log(&format!("Job start: \"{name}\" ({} bytes, {passes} passes)", data.len()));
                 // keep the machine awake for the whole job (send + execution)
                 let inhibitor = SleepInhibitor::new();
-                let result = self.send_data(&data, passes, Some(&name));
+                // Auto-home: every job's coordinates are relative to the home
+                // position, so zero the head first. The controller executes
+                // packets in order, so the job data can follow right away.
+                self.set_status(|s| s.message = "Fahre Home-Position an…".into());
+                let result = self
+                    .send_packet_checked(&HOME)
+                    .and_then(|()| {
+                        self.set_status(|s| {
+                            s.pos_x_mils = 0;
+                            s.pos_y_mils = 0;
+                            s.pos_known = true;
+                        });
+                        self.send_data(&data, passes, Some(&name))
+                    });
                 drop(inhibitor);
                 match result {
                     Ok(()) => {
@@ -383,6 +414,8 @@ impl Worker {
                             s.paused = false;
                             s.job_name = None;
                             s.message = format!("Job abgebrochen: {e}");
+                            // stopped mid-job: the head is somewhere on the path
+                            s.pos_known = false;
                             s.error = Some(format!("Job „{name}“ abgebrochen: {e}"));
                         })
                     }

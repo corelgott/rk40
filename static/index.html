@@ -36,6 +36,9 @@ header h1 span{color:var(--accent)}
 .nav button{border:none; background:transparent; padding:6px 14px; font-size:.84rem; border-radius:7px; color:var(--muted)}
 .nav button.active{background:var(--panel); color:var(--text); font-weight:600; box-shadow:0 1px 4px rgba(0,0,0,.25)}
 .nav button:hover:not(.active){color:var(--text); border-color:transparent}
+.nav .navplus{padding:6px 9px; display:inline-flex; align-items:center}
+.nav .navplus svg{width:15px; height:15px; display:block}
+.nav .navplus:hover:not(:disabled){background:var(--panel); color:var(--accent)}
 button.pill{
   display:inline-flex; align-items:center; gap:7px; padding:6px 14px;
   border-radius:99px; font-size:.8rem; border:1px solid var(--border);
@@ -66,6 +69,13 @@ button.pill:hover:not(:disabled){border-color:var(--accent2); color:var(--text)}
 .hdr-group #hdrstop{color:var(--danger)}
 .hdr-group #hdrstop:hover:not(:disabled){color:var(--danger); background:rgba(239,68,68,.14)}
 .hdr-group .divider{width:1px; height:18px; background:var(--border); margin:0 4px}
+#hdrprint{
+  display:none; align-items:center; gap:6px; padding:6px 14px; border-radius:99px;
+  font-size:.8rem; white-space:nowrap;
+}
+#hdrprint svg{width:13px; height:13px; display:block}
+body.quickprint #hdrprint{display:inline-flex}
+@media (max-width:700px){ #hdrprint .lbl{display:none} #hdrprint{padding:6px 10px} }
 .spacer{flex:1}
 
 main{
@@ -180,6 +190,7 @@ button.primary:hover:not(:disabled){background:#ffb83d}
 button.danger{background:rgba(239,68,68,.12); border-color:rgba(239,68,68,.4); color:var(--danger); font-weight:600}
 button.danger:hover:not(:disabled){background:rgba(239,68,68,.25); border-color:var(--danger)}
 button.small{padding:5px 10px; font-size:.78rem}
+label.inlinecheck{display:inline-flex; align-items:center; gap:7px; margin:0; font-size:.82rem; color:var(--text); cursor:pointer}
 .btnrow{display:flex; gap:10px; margin-top:14px}
 .btnrow button{flex:1}
 
@@ -192,6 +203,66 @@ button.small{padding:5px 10px; font-size:.78rem}
 #drop.hover, #drop:hover{border-color:var(--accent); background:rgba(245,165,36,.05)}
 #drop b{color:var(--text)}
 #fileinfo{font-size:.82rem; color:var(--accent); margin-top:8px; display:none}
+/* Virtuelle Laserkopf-Position */
+#headpos{position:absolute; inset:0; pointer-events:none; z-index:60; display:none; --hp:#ef4444}
+#headpos.show{display:block}
+#headpos .hp-v{position:absolute; top:0; bottom:0; width:0; border-left:1px dashed var(--hp); opacity:.45}
+#headpos .hp-h{position:absolute; left:0; right:0; height:0; border-top:1px dashed var(--hp); opacity:.45}
+#headpos .hp-dot{
+  position:absolute; width:16px; height:16px; margin:-8px 0 0 -8px; border-radius:50%;
+  border:2px solid var(--hp); background:rgba(239,68,68,.18);
+  box-shadow:0 0 0 3px rgba(239,68,68,.15), 0 0 10px rgba(239,68,68,.6);
+}
+#headpos .hp-dot::after{
+  content:""; position:absolute; left:50%; top:50%; width:4px; height:4px; margin:-2px 0 0 -2px;
+  border-radius:50%; background:var(--hp);
+}
+#headpos .hp-label{
+  position:absolute; font-size:.68rem; font-weight:600; white-space:nowrap; color:#fff;
+  background:var(--hp); border-radius:5px; padding:2px 6px; transform:translate(12px, 10px);
+}
+#headpos .hp-label.flipx{transform:translate(calc(-100% - 12px), 10px)}
+#headpos .hp-label.flipy{transform:translate(12px, calc(-100% - 10px))}
+#headpos .hp-label.flipx.flipy{transform:translate(calc(-100% - 12px), calc(-100% - 10px))}
+#headpos.unknown{--hp:#8b94a3}
+#headpos.unknown .hp-dot{background:transparent; box-shadow:none; border-style:dashed}
+#headpos.busy{opacity:.55}
+.batchload{display:flex; align-items:center; gap:10px; margin-top:10px; flex-wrap:wrap}
+.batchload .hint{margin:0}
+#batchinfo:empty{display:none}
+#batchinfo{margin-top:8px; display:flex; flex-direction:column; gap:3px}
+.batchline{font-size:.8rem; color:var(--accent); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.batchline.finished{color:var(--ok)}
+
+/* Batch-Liste im Layer: bewusst schlank */
+.layer-head .batchbadge{
+  font-size:.68rem; font-weight:600; color:var(--accent); flex-shrink:0;
+  border:1px solid rgba(245,165,36,.4); border-radius:99px; padding:1px 7px;
+}
+.batch{border-top:1px solid var(--border); padding:6px 10px 8px}
+.batch-bar{display:flex; align-items:center; gap:10px; margin-bottom:6px; flex-wrap:wrap}
+.batch-bar select{width:auto; padding:3px 6px; font-size:.75rem}
+.batch-bar label{display:inline-flex; align-items:center; gap:5px; margin:0; font-size:.75rem; color:var(--text); cursor:pointer}
+.batch-bar input[type=checkbox]{width:14px; height:14px}
+.batch-count{margin-left:auto; font-size:.72rem; color:var(--muted)}
+.batch-list{max-height:260px; overflow-y:auto; border:1px solid var(--border); border-radius:7px; background:var(--panel)}
+.brow{
+  display:flex; align-items:center; gap:6px; padding:2px 6px; min-height:24px;
+  font-size:.78rem; border-top:1px solid var(--border); border-left:3px solid transparent;
+}
+.brow:first-child{border-top:none}
+.brow .bhandle{cursor:grab; color:var(--muted); font-size:.8rem; line-height:1; user-select:none; padding:0 2px}
+.brow input[type=checkbox]{width:14px; height:14px; flex-shrink:0}
+.brow .bname{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; cursor:pointer}
+.brow .bname:hover{color:var(--accent2)}
+.brow .bwarn{color:var(--danger); font-size:.75rem; cursor:help}
+.brow.done .bname{color:var(--muted)}
+.brow.cur{border-left-color:var(--accent); background:rgba(245,165,36,.09)}
+.brow.cur .bname{font-weight:600; color:var(--text)}
+.brow.dragging{opacity:.4}
+.brow.drop-before{box-shadow:inset 0 2px 0 var(--accent2)}
+.brow.drop-after{box-shadow:inset 0 -2px 0 var(--accent2)}
+.batch-empty{font-size:.75rem; color:var(--muted); padding:6px 8px}
 
 /* Layer list */
 #layerlist{display:flex; flex-direction:column; gap:8px}
@@ -318,9 +389,16 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
   <nav class="nav">
     <button id="nav_lab" class="active" data-i18n="nav.control">Steuerung</button>
     <button id="nav_projects" data-i18n="nav.projects">Projekte</button>
+    <button id="nav_new" class="navplus" data-i18n-title="nav.new_title" title="Neues, leeres Projekt">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+    </button>
   </nav>
   <div class="spacer"></div>
   <button class="pill" id="connpill"><span class="dot"></span><span id="conntext">Nicht verbunden</span><span id="hdrprogress"></span></button>
+  <button class="primary" id="hdrprint" data-needsconn disabled data-i18n-title="title.quickprint" title="Alle sichtbaren Designs drucken">
+    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l13-7.5z"/></svg>
+    <span class="lbl" data-i18n="btn.quickprint">Drucken</span>
+  </button>
   <div class="hdr-group">
     <button id="hdrhome" data-i18n-title="title.home" title="Home" data-needsconn>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h5v-6h4v6h5V9.5"/></svg>
@@ -356,6 +434,7 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
           <div class="cmark tr" id="mark_tr"></div>
           <div class="cmark bl" id="mark_bl"></div>
           <div class="cmark br" id="mark_br"></div>
+          <div id="headpos"><div class="hp-v"></div><div class="hp-h"></div><div class="hp-dot"></div><span class="hp-label"></span></div>
         </div>
       </div>
       <div id="bedinfo">
@@ -400,6 +479,14 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
             <option value="10" selected data-i18n="laser.step_10">10 mm</option>
             <option value="50" data-i18n="laser.step_50">50 mm</option>
           </select>
+          <label data-i18n="laser.jogfeed_label" data-i18n-title="laser.jogfeed_title" title="Begrenzt das Tempo der Verfahr-Bewegungen, damit das Werkstück nicht verrutscht" style="margin-top:8px">Jog-Tempo</label>
+          <select id="jogfeed" style="width:110px">
+            <option value="" data-i18n="laser.jogfeed_max">Maximal</option>
+            <option value="200">200 mm/s</option>
+            <option value="100">100 mm/s</option>
+            <option value="50">50 mm/s</option>
+            <option value="20">20 mm/s</option>
+          </select>
         </div>
       </div>
       <div id="progresswrap">
@@ -420,6 +507,12 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
         <div id="fileinfo"></div>
       </div>
       <input type="file" id="file" accept=".svg,image/svg+xml" multiple hidden>
+      <div class="batchload">
+        <button class="small" id="btnbatch" data-i18n="batch.load_btn">📁 Ordner als Batch laden</button>
+        <span class="hint" data-i18n="batch.load_hint">Alle SVGs nacheinander lasern – gleiche Position, gleiche Parameter</span>
+      </div>
+      <input type="file" id="batchdir" webkitdirectory multiple hidden>
+      <div id="batchinfo"></div>
     </div>
 
     <div class="card">
@@ -502,13 +595,14 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
         <button class="primary" id="btnprint" disabled data-needsconn data-i18n="btn.print">▶ Drucken</button>
         <button id="btnsave" disabled data-i18n="btn.save_project">💾 Als Projekt speichern</button>
       </div>
-      <div style="display:flex; justify-content:flex-end; margin-top:8px">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-top:8px">
+        <label class="inlinecheck" data-i18n-title="prepare.quickprint_title" title="Zeigt zusätzlich einen gelben Drucken-Knopf oben in der Kopfleiste"><input type="checkbox" id="quickprint"> <span data-i18n="prepare.quickprint">Schnell-Druck</span></label>
         <button class="small" id="btndefaults" data-i18n="btn.save_defaults" data-i18n-title="btn.save_defaults_title" title="Aktuelle Tempo-/Raster-/Durchgangs-Werte als Standard auf dem Server speichern">Werte als Standard speichern</button>
       </div>
       <div class="hint" data-i18n-html="hint.print">
         <b>Drucken</b> sliced und startet alle sichtbaren Designs nacheinander.
         Reihenfolge: Gravur → Vektor-Gravur → Schnitt je Design.
-        Vor dem Druck den Kopf mit <b>⌂ Home</b> nullen. Leistung stellst du am Potentiometer ein.
+        Der Kopf fährt vorher automatisch auf <b>⌂ Home</b>. Leistung stellst du am Potentiometer ein.
         Pfade auf <b>Ignorieren</b> erscheinen transparent und werden nicht gelasert.
       </div>
     </div>
@@ -531,7 +625,7 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
   <label data-i18n="dialog.repeats_label">Wiederholungen (kompletter Job)</label>
   <input type="number" id="printpasses" value="1" min="1" max="50" style="margin-bottom:16px">
   <div class="hint" style="margin-bottom:16px" data-i18n="dialog.print_hint">
-    Der Kopf sollte auf der Home-Position stehen (oben links). Die im Projekt
+    Der Kopf fährt vorher automatisch auf die Home-Position. Die im Projekt
     gespeicherten Durchgänge pro Operation laufen automatisch.
   </div>
   <div style="display:flex;gap:10px;justify-content:flex-end">
@@ -556,8 +650,9 @@ let clipmode = "off";
 
 // Fortschritt / ETA über die gesamte Druck-Warteschlange
 let printEta = { estimate_s:0, started_at:0, queue_total:0, queue_done:0 };
-let printQueue = []; // [{name, svg, settings}]
+let printQueue = []; // [{name, svg, settings, _batch}]
 let printBusy = false;
+let printRunning = null; // Queue-Eintrag, der gerade auf dem Laser läuft
 
 /////////////////////// i18n ///////////////////////
 const I18N = {
@@ -604,6 +699,9 @@ const I18N = {
     "laser.unlock": "🔓 Entriegeln",
     "laser.stop": "■ Stopp",
     "laser.step_label": "Schrittweite",
+    "laser.jogfeed_label": "Jog-Tempo",
+    "laser.jogfeed_title": "Begrenzt das Tempo der Verfahr-Bewegungen, damit das Werkstück nicht verrutscht",
+    "laser.jogfeed_max": "Maximal",
     "laser.step_0_1": "0,1 mm",
     "laser.step_1": "1 mm",
     "laser.step_10": "10 mm",
@@ -614,6 +712,41 @@ const I18N = {
     "svg.empty_hint": "Noch kein Design geladen – SVG oben ablegen",
     "svg.error_read": "SVG konnte nicht gelesen werden: {error}",
     "svg.error_no_files": "Bitte SVG-Datei(en) ablegen",
+    "title.quickprint": "Alle sichtbaren Designs drucken",
+    "nav.new_title": "Neues, leeres Projekt",
+    "project.new_confirm": "Neues, leeres Projekt anfangen?\n\nAlles auf der Arbeitsfläche wird entfernt, auch ein Batch-Fortschritt. Gespeicherte Projekte bleiben erhalten.",
+    "project.new_busy": "Während ein Job läuft, kann kein neues Projekt angelegt werden",
+    "head.label": "Kopf {x} / {y} mm",
+    "head.unknown": "Kopfposition unbekannt – ⌂ Home fahren",
+    "head.busy": "Job läuft",
+    "btn.quickprint": "Drucken",
+    "prepare.quickprint": "Schnell-Druck",
+    "prepare.quickprint_title": "Zeigt zusätzlich einen gelben Drucken-Knopf oben in der Kopfleiste",
+    "batch.load_btn": "📁 Ordner als Batch laden",
+    "batch.load_hint": "Alle SVGs nacheinander lasern – gleiche Position, gleiche Parameter",
+    "batch.default_name": "Batch",
+    "batch.no_svgs": "Keine SVG-Dateien in „{folder}“ gefunden",
+    "batch.loading": "Lade {n} SVGs…",
+    "batch.none_readable": "Keine der SVG-Dateien konnte gelesen werden",
+    "batch.some_failed": "Batch geladen, aber {n} Datei(en) waren nicht lesbar",
+    "batch.size_warning": "Achtung: {n} Datei(en) weichen von den Außenmaßen ab (⚠ in der Liste)",
+    "batch.loaded": "{n} Motive aus „{folder}“ geladen",
+    "batch.next": "Gelasert ✓ – nächstes Motiv: {name}",
+    "batch.finished": "Batch „{folder}“ komplett gelasert ✓",
+    "batch.info": "📁 {folder}: Motiv {pos}/{n} · {name} · {done} gelasert",
+    "batch.info_done": "📁 {folder}: alle {n} Motive gelasert ✓",
+    "batch.badge_title": "Gelaserte Motive / Motive im Ordner",
+    "batch.sort_title": "Reihenfolge der Dateien",
+    "batch.sort_natural": "Natürlich (1, 2, 11)",
+    "batch.sort_alpha": "Alphabetisch",
+    "batch.sort_manual": "Manuell",
+    "batch.only_open": "nur offene",
+    "batch.count": "{done}/{n} gelasert",
+    "batch.all_done": "Alle Motive gelasert ✓",
+    "batch.drag_title": "Ziehen zum Sortieren",
+    "batch.done_title": "Gelasert",
+    "batch.select_title": "Als nächstes Motiv laden",
+    "batch.size_off": "Maße weichen ab: {w}×{h} mm statt {rw}×{rh} mm",
     "design.default_name": "Design {n}",
     "layers.heading": "Pfade & Werkstück",
     "layer.show_title": "Anzeigen",
@@ -655,7 +788,7 @@ const I18N = {
     "btn.save_project": "💾 Als Projekt speichern",
     "btn.save_defaults": "Werte als Standard speichern",
     "btn.save_defaults_title": "Aktuelle Tempo-/Raster-/Durchgangs-Werte als Standard auf dem Server speichern",
-    "hint.print": "<b>Drucken</b> sliced und startet alle sichtbaren Designs nacheinander. Reihenfolge: Gravur → Vektor-Gravur → Schnitt je Design. Vor dem Druck den Kopf mit <b>⌂ Home</b> nullen. Leistung stellst du am Potentiometer ein. Pfade auf <b>Ignorieren</b> erscheinen transparent und werden nicht gelasert.",
+    "hint.print": "<b>Drucken</b> sliced und startet alle sichtbaren Designs nacheinander. Reihenfolge: Gravur → Vektor-Gravur → Schnitt je Design. Der Kopf fährt vorher automatisch auf <b>⌂ Home</b>. Leistung stellst du am Potentiometer ein. Pfade auf <b>Ignorieren</b> erscheinen transparent und werden nicht gelasert.",
     "progress.eta": " · noch ~{time}",
     "time.seconds": "{n} s",
     "time.minutes_seconds": "{m} min {s} s",
@@ -663,8 +796,6 @@ const I18N = {
     "btn.slicing": "⚙ Slice…",
     "btn.calculating": "⚙ Berechne…",
     "print.no_designs": "Kein druckbares Design (sichtbar und nicht ignoriert)",
-    "print.confirm": "Jetzt drucken?\n\n{summary}\n\nKopf sollte auf Home stehen.",
-    "print.summary_line": "• {name}: {w}×{h} @ {x}/{y}",
     "print.toast_active": "Druckt „{name}“ · ca. {time}",
     "print.toast_queue": " · noch {n} Design(s)",
     "reset.confirm": "Stage zurücksetzen? SVG, Position und Parameter werden verworfen.",
@@ -687,7 +818,7 @@ const I18N = {
     "projects.source_not_found": "Quelle nicht gefunden",
     "dialog.print_title": "Projekt drucken",
     "dialog.repeats_label": "Wiederholungen (kompletter Job)",
-    "dialog.print_hint": "Der Kopf sollte auf der Home-Position stehen (oben links). Die im Projekt gespeicherten Durchgänge pro Operation laufen automatisch.",
+    "dialog.print_hint": "Der Kopf fährt vorher automatisch auf die Home-Position. Die im Projekt gespeicherten Durchgänge pro Operation laufen automatisch.",
     "dialog.cancel": "Abbrechen",
     "dialog.print_ok": "▶ Drucken"
   },
@@ -734,6 +865,9 @@ const I18N = {
     "laser.unlock": "🔓 Unlock",
     "laser.stop": "■ Stop",
     "laser.step_label": "Step size",
+    "laser.jogfeed_label": "Jog speed",
+    "laser.jogfeed_title": "Limits the speed of travel moves so the workpiece doesn't shift",
+    "laser.jogfeed_max": "Full speed",
     "laser.step_0_1": "0.1 mm",
     "laser.step_1": "1 mm",
     "laser.step_10": "10 mm",
@@ -744,6 +878,41 @@ const I18N = {
     "svg.empty_hint": "No design loaded yet – drop SVG above",
     "svg.error_read": "Could not read SVG: {error}",
     "svg.error_no_files": "Please drop SVG file(s)",
+    "title.quickprint": "Print all visible designs",
+    "nav.new_title": "New, empty project",
+    "project.new_confirm": "Start a new, empty project?\n\nEverything on the work area is removed, including batch progress. Saved projects are kept.",
+    "project.new_busy": "Can't start a new project while a job is running",
+    "head.label": "Head {x} / {y} mm",
+    "head.unknown": "Head position unknown – press ⌂ Home",
+    "head.busy": "Job running",
+    "btn.quickprint": "Print",
+    "prepare.quickprint": "Quick print",
+    "prepare.quickprint_title": "Also shows a yellow print button in the header bar",
+    "batch.load_btn": "📁 Load folder as batch",
+    "batch.load_hint": "Laser all SVGs one after another – same position, same parameters",
+    "batch.default_name": "Batch",
+    "batch.no_svgs": "No SVG files found in “{folder}”",
+    "batch.loading": "Loading {n} SVGs…",
+    "batch.none_readable": "None of the SVG files could be read",
+    "batch.some_failed": "Batch loaded, but {n} file(s) could not be read",
+    "batch.size_warning": "Warning: {n} file(s) differ from the outer dimensions (⚠ in the list)",
+    "batch.loaded": "Loaded {n} motifs from “{folder}”",
+    "batch.next": "Lasered ✓ – next motif: {name}",
+    "batch.finished": "Batch “{folder}” fully lasered ✓",
+    "batch.info": "📁 {folder}: motif {pos}/{n} · {name} · {done} lasered",
+    "batch.info_done": "📁 {folder}: all {n} motifs lasered ✓",
+    "batch.badge_title": "Lasered motifs / motifs in folder",
+    "batch.sort_title": "File order",
+    "batch.sort_natural": "Natural (1, 2, 11)",
+    "batch.sort_alpha": "Alphabetical",
+    "batch.sort_manual": "Manual",
+    "batch.only_open": "open only",
+    "batch.count": "{done}/{n} lasered",
+    "batch.all_done": "All motifs lasered ✓",
+    "batch.drag_title": "Drag to reorder",
+    "batch.done_title": "Lasered",
+    "batch.select_title": "Load as next motif",
+    "batch.size_off": "Size differs: {w}×{h} mm instead of {rw}×{rh} mm",
     "design.default_name": "Design {n}",
     "layers.heading": "Paths & workpiece",
     "layer.show_title": "Show",
@@ -785,7 +954,7 @@ const I18N = {
     "btn.save_project": "💾 Save as project",
     "btn.save_defaults": "Save values as defaults",
     "btn.save_defaults_title": "Save current speed/raster/pass values as server defaults",
-    "hint.print": "<b>Print</b> slices and starts all visible designs one after another. Order: raster → vector engrave → cut per design. Zero the head with <b>⌂ Home</b> before printing. Set power on the potentiometer. Paths set to <b>Ignore</b> appear transparent and are not lasered.",
+    "hint.print": "<b>Print</b> slices and starts all visible designs one after another. Order: raster → vector engrave → cut per design. The head homes automatically before printing. Set power on the potentiometer. Paths set to <b>Ignore</b> appear transparent and are not lasered.",
     "progress.eta": " · ~{time} left",
     "time.seconds": "{n} s",
     "time.minutes_seconds": "{m} min {s} s",
@@ -793,8 +962,6 @@ const I18N = {
     "btn.slicing": "⚙ Slicing…",
     "btn.calculating": "⚙ Calculating…",
     "print.no_designs": "No printable design (visible and not ignored)",
-    "print.confirm": "Print now?\n\n{summary}\n\nHead should be at home.",
-    "print.summary_line": "• {name}: {w}×{h} @ {x}/{y}",
     "print.toast_active": "Printing \"{name}\" · approx. {time}",
     "print.toast_queue": " · {n} design(s) remaining",
     "reset.confirm": "Reset stage? SVG, position and parameters will be discarded.",
@@ -817,7 +984,7 @@ const I18N = {
     "projects.source_not_found": "Source not found",
     "dialog.print_title": "Print project",
     "dialog.repeats_label": "Repetitions (complete job)",
-    "dialog.print_hint": "The head should be at the home position (top left). Passes per operation saved in the project run automatically.",
+    "dialog.print_hint": "The head homes automatically before printing. Passes per operation saved in the project run automatically.",
     "dialog.cancel": "Cancel",
     "dialog.print_ok": "▶ Print"
   }
@@ -961,9 +1128,14 @@ function applyStatus(s){
   }
 
   updateProgressUI(s);
+  updateHeadPos();
 
   // Druck-Warteschlange: nächstes Design starten, wenn der Lauf fertig ist
   if(wasBusy && !s.busy && printBusy){
+    const finished = printRunning;
+    printRunning = null;
+    // Batch: nur bei fehlerfreiem Lauf abhaken (Stopp/Abbruch setzt s.error)
+    if(finished && finished._batch && !s.error) batchMarkPrinted(finished._batch);
     printEta.queue_done = Math.min(printEta.queue_total, printEta.queue_done + 1);
     if(printQueue.length){
       setTimeout(drainPrintQueue, 200);
@@ -974,7 +1146,7 @@ function applyStatus(s){
   }
 
   document.querySelectorAll("[data-needsconn]").forEach(b=>{
-    const isPrint = b.id === "btnprint";
+    const isPrint = b.id === "btnprint" || b.id === "hdrprint";
     const isStop = b.id === "btnstop" || b.id === "hdrstop";
     if(isStop){
       b.disabled = !connected || (!s.busy && !printQueue.length);
@@ -1215,8 +1387,340 @@ $("file").addEventListener("change", e => {
   e.preventDefault(); $("drop").classList.remove("hover");
 }));
 $("drop").addEventListener("drop", e => {
+  // Ordner abgelegt → Batch. webkitGetAsEntry nur synchron im Drop-Event gültig.
+  const dirs = [...(e.dataTransfer.items || [])]
+    .map(it => it.webkitGetAsEntry ? it.webkitGetAsEntry() : null)
+    .filter(en => en && en.isDirectory);
+  if(dirs.length){
+    (async ()=>{
+      for(const dir of dirs){
+        const items = [];
+        try { await collectEntryFiles(dir, "", items); } catch(err){}
+        await loadBatch(dir.name, items);
+      }
+    })();
+    return;
+  }
   loadFiles(e.dataTransfer.files);
 });
+
+/////////////////////// batch ///////////////////////
+// Ein Batch ist ein Design, dessen Motiv nach jedem erfolgreichen Druck durch
+// die nächste offene Datei des Ordners ersetzt wird. Position, Skalierung und
+// Laser-Parameter gehören zum Design und bleiben dabei gleich.
+const BATCH_SIZE_TOL = 0.5; // mm Abweichung vom Sollmaß, ab der gewarnt wird
+
+$("btnbatch").addEventListener("click", ()=> $("batchdir").click());
+$("batchdir").addEventListener("change", async e => {
+  const all = [...e.target.files];
+  e.target.value = "";
+  if(!all.length) return;
+  const folder = (all[0].webkitRelativePath || "").split("/")[0] || t("batch.default_name");
+  const items = all
+    .filter(f => !(f.webkitRelativePath || f.name).split("/").some(p => p.startsWith(".")))
+    .map(f => ({ name: (f.webkitRelativePath || f.name).split("/").slice(1).join("/") || f.name, file: f }));
+  await loadBatch(folder, items);
+});
+
+async function collectEntryFiles(dir, prefix, out){
+  const reader = dir.createReader();
+  for(;;){
+    const chunk = await new Promise((res, rej) => reader.readEntries(res, rej));
+    if(!chunk.length) break;
+    for(const en of chunk){
+      if(en.name.startsWith(".")) continue; // ._AppleDouble, .DS_Store …
+      if(en.isDirectory) await collectEntryFiles(en, prefix + en.name + "/", out);
+      else if(/\.svg$/i.test(en.name)){
+        const file = await new Promise((res, rej) => en.file(res, rej));
+        out.push({ name: prefix + en.name, file });
+      }
+    }
+  }
+}
+
+async function loadBatch(folder, items){
+  const svgs = items.filter(it => /\.svg$/i.test(it.name));
+  if(!svgs.length){ toast(t("batch.no_svgs", {folder}), true); return; }
+  toast(t("batch.loading", {n: svgs.length}));
+  const files = [];
+  let failed = 0, next = 0;
+  async function worker(){
+    while(next < svgs.length){
+      const it = svgs[next++];
+      try {
+        const svg = await it.file.text();
+        const pal = await post("/api/palette", { svg });
+        files.push({
+          id: uid(), name: it.name.replace(/\.svg$/i, ""), svg, done: false,
+          w: pal.width_mm, h: pal.height_mm, colors: pal.colors || []
+        });
+      } catch(err){ failed++; }
+    }
+  }
+  await Promise.all([0,1,2,3].map(worker));
+  if(!files.length){ toast(t("batch.none_readable"), true); return; }
+  const b = { folder, sort: "natural", onlyOpen: false, currentId: null, shownId: null, files };
+  sortBatch(b);
+  b.currentId = b.files[0].id;
+  const d = await addBatchDesign(b, { name: folder });
+  if(!d) return;
+  saveWorkspace(true);
+  const off = b.files.filter(f => batchSizeOff(b, f)).length;
+  if(failed) toast(t("batch.some_failed", {n: failed}), true);
+  else if(off) toast(t("batch.size_warning", {n: off}), true);
+  else toast(t("batch.loaded", {n: files.length, folder}));
+}
+
+// raw: gespeicherter Design-State (Wiederherstellung) oder {name}
+async function addBatchDesign(b, raw){
+  b.files = b.files.filter(f => f && f.svg);
+  if(!b.files.length) return null;
+  const shown = b.files.find(f => f.id === (b.shownId || b.currentId)) || b.files[0];
+  const d = await addDesignFromSvg(shown.svg, b.folder+".svg", raw);
+  if(!d) return null;
+  d.batch = b;
+  if(raw && raw.colorOps) Object.assign(d.colorOps, raw.colorOps);
+  if(b.currentId && !b.files.some(f => f.id === b.currentId)) b.currentId = null;
+  batchShow(d, shown);
+  renderLayerList();
+  updateOpSections();
+  updateStage();
+  applyStatus(deviceStatus);
+  return d;
+}
+
+function sortBatch(b){
+  if(b.sort !== "natural" && b.sort !== "alpha") return; // manuell: Reihenfolge bleibt
+  // natural: Zahlen als Zahlen (1 = 001 < 2 < 11); alpha: rein zeichenweise
+  const c = new Intl.Collator(localeTag(), { numeric: b.sort === "natural", sensitivity: "base" });
+  b.files.sort((x, y) => c.compare(x.name, y.name) || (x.name < y.name ? -1 : x.name > y.name ? 1 : 0));
+}
+function batchCurrent(d){
+  const b = d.batch;
+  return b ? (b.files.find(f => f.id === b.currentId) || null) : null;
+}
+// nächste offene Datei nach fromId (mit Umlauf); fromId unbekannt → erste offene
+function batchNextOpen(b, fromId){
+  const n = b.files.length;
+  const start = b.files.findIndex(f => f.id === fromId);
+  for(let k = 1; k <= n; k++){
+    const f = b.files[(start + k + n) % n];
+    if(!f.done) return f;
+  }
+  return null;
+}
+// Sollmaß = häufigste Größe im Ordner (auf 0,5 mm gerundet)
+function batchRefSize(b){
+  const counts = new Map();
+  for(const f of b.files){
+    const k = (Math.round(f.w*2)/2)+"x"+(Math.round(f.h*2)/2);
+    counts.set(k, (counts.get(k) || 0) + 1);
+  }
+  let best = null, bn = 0;
+  for(const [k, n] of counts) if(n > bn){ best = k; bn = n; }
+  if(!best) return null;
+  const [w, h] = best.split("x").map(Number);
+  return { w, h };
+}
+function batchSizeOff(b, f, ref){
+  ref = ref || batchRefSize(b);
+  if(!ref) return false;
+  return Math.abs(f.w - ref.w) > BATCH_SIZE_TOL || Math.abs(f.h - ref.h) > BATCH_SIZE_TOL;
+}
+// Palette = Vereinigung aller Farben im Ordner, damit jede Farbe einmal für den
+// ganzen Batch zugeordnet wird; Pfadanzahl aus dem angezeigten Motiv.
+function batchApplyPalette(d){
+  const b = d.batch;
+  const shown = b.files.find(f => f.id === b.shownId);
+  const cur = new Map((shown ? shown.colors : []).map(c => [c.color, c.count]));
+  const seen = new Set(), pal = [];
+  for(const f of b.files){
+    for(const c of f.colors){
+      if(seen.has(c.color)) continue;
+      seen.add(c.color);
+      pal.push({ color: c.color, count: cur.get(c.color) || 0 });
+    }
+  }
+  pal.sort((x, y) => y.count - x.count);
+  d.palette = pal;
+  for(const c of pal) if(!d.colorOps[c.color]) d.colorOps[c.color] = defaultOpFor(c.color);
+}
+function batchShow(d, f){
+  d.batch.shownId = f.id;
+  d.svg = f.svg;
+  d.sizeMM = { w: f.w, h: f.h };
+  batchApplyPalette(d);
+  refreshDesignPreview(d);
+}
+function batchRefresh(){
+  renderLayerList(); updateOpSections(); updateStage(); applyStatus(deviceStatus); scheduleWsSave();
+}
+function batchSetCurrent(d, fileId){
+  const f = d.batch.files.find(x => x.id === fileId);
+  if(!f) return;
+  d.batch.currentId = f.id;
+  d.batch.reveal = true;
+  batchShow(d, f);
+  batchRefresh();
+}
+function batchAdvance(d){
+  const next = batchNextOpen(d.batch, d.batch.currentId);
+  if(next) batchSetCurrent(d, next.id);
+  else { d.batch.currentId = null; batchRefresh(); }
+  return next;
+}
+function batchMarkPrinted(ref){
+  const d = getDesign(ref.designId);
+  if(!d || !d.batch) return;
+  const f = d.batch.files.find(x => x.id === ref.fileId);
+  if(!f) return;
+  f.done = true;
+  if(d.batch.currentId !== f.id){ batchRefresh(); return; } // Nutzer hat inzwischen umgeschaltet
+  const next = batchAdvance(d);
+  toast(next ? t("batch.next", {name: next.name}) : t("batch.finished", {folder: d.name}));
+}
+function batchToggleDone(d, f, done){
+  f.done = done;
+  if(done && d.batch.currentId === f.id){ batchAdvance(d); return; }
+  if(!done && !batchCurrent(d)){ batchSetCurrent(d, f.id); return; }
+  batchRefresh();
+}
+
+function updateBatchInfo(){
+  const el = $("batchinfo");
+  el.innerHTML = "";
+  for(const d of designs){
+    if(!d.batch) continue;
+    const b = d.batch, cur = batchCurrent(d);
+    const done = b.files.filter(f => f.done).length;
+    const line = document.createElement("div");
+    line.className = "batchline" + (cur ? "" : " finished");
+    line.textContent = cur
+      ? t("batch.info", {folder: d.name, pos: b.files.indexOf(cur) + 1, n: b.files.length, done, name: cur.name})
+      : t("batch.info_done", {folder: d.name, n: b.files.length});
+    el.appendChild(line);
+  }
+}
+
+function buildBatchSection(d){
+  const b = d.batch;
+  const ref = batchRefSize(b);
+  const done = b.files.filter(f => f.done).length;
+  const sec = document.createElement("div");
+  sec.className = "batch";
+  sec.innerHTML = `
+    <div class="batch-bar">
+      <select data-sort title="${t("batch.sort_title")}">
+        <option value="natural">${t("batch.sort_natural")}</option>
+        <option value="alpha">${t("batch.sort_alpha")}</option>
+        <option value="manual">${t("batch.sort_manual")}</option>
+      </select>
+      <label><input type="checkbox" data-onlyopen ${b.onlyOpen ? "checked" : ""}> ${t("batch.only_open")}</label>
+      <span class="batch-count">${t("batch.count", {done, n: b.files.length})}</span>
+    </div>
+    <div class="batch-list"></div>`;
+  const sel = sec.querySelector("[data-sort]");
+  sel.value = b.sort;
+  sel.addEventListener("change", ()=>{
+    b.sort = sel.value;
+    sortBatch(b);
+    if(!b.currentId) b.currentId = (batchNextOpen(b, null) || {}).id || null;
+    batchRefresh();
+  });
+  sec.querySelector("[data-onlyopen]").addEventListener("change", e => {
+    b.onlyOpen = e.target.checked;
+    b.reveal = true;
+    batchRefresh();
+  });
+
+  const list = sec.querySelector(".batch-list");
+  const visible = b.files.filter(f => !b.onlyOpen || !f.done);
+  if(!visible.length){
+    const empty = document.createElement("div");
+    empty.className = "batch-empty";
+    empty.textContent = t("batch.all_done");
+    list.appendChild(empty);
+  }
+  for(const f of visible){
+    const row = document.createElement("div");
+    const off = batchSizeOff(b, f, ref);
+    row.className = "brow" + (f.id === b.currentId ? " cur" : "") + (f.done ? " done" : "");
+    row.dataset.fid = f.id;
+    row.innerHTML = `
+      <span class="bhandle" title="${t("batch.drag_title")}">⠿</span>
+      <input type="checkbox" ${f.done ? "checked" : ""} title="${t("batch.done_title")}">
+      <span class="bname"></span>
+      ${off ? `<span class="bwarn" title="${t("batch.size_off", {w: fmtMM(f.w), h: fmtMM(f.h), rw: fmtMM(ref.w), rh: fmtMM(ref.h)})}">⚠</span>` : ""}`;
+    const nm = row.querySelector(".bname");
+    nm.textContent = f.name;
+    nm.title = t("batch.select_title");
+    nm.addEventListener("click", ()=> batchSetCurrent(d, f.id));
+    row.querySelector("input").addEventListener("change", e => batchToggleDone(d, f, e.target.checked));
+    bindBatchDrag(d, row, list);
+    list.appendChild(row);
+  }
+
+  // Scrollposition über Neuaufbau hinweg halten; aktuelle Datei ggf. einblenden
+  list.addEventListener("scroll", ()=>{ b.scrollTop = list.scrollTop; });
+  requestAnimationFrame(()=>{
+    list.scrollTop = b.scrollTop || 0;
+    const cur = list.querySelector(".brow.cur");
+    if(b.reveal && cur){
+      const top = cur.offsetTop - list.offsetTop;
+      if(top < list.scrollTop || top + cur.offsetHeight > list.scrollTop + list.clientHeight){
+        list.scrollTop = Math.max(0, top - list.clientHeight/2 + cur.offsetHeight/2);
+      }
+      b.scrollTop = list.scrollTop;
+    }
+    b.reveal = false;
+  });
+  return sec;
+}
+
+// Sortieren per Drag & Drop, nur über den Anfasser
+let batchDragId = null;
+function bindBatchDrag(d, row, list){
+  const handle = row.querySelector(".bhandle");
+  handle.addEventListener("pointerdown", ()=>{ row.draggable = true; });
+  handle.addEventListener("pointerup", ()=>{ row.draggable = false; });
+  row.addEventListener("dragstart", e => {
+    batchDragId = row.dataset.fid;
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", batchDragId);
+    row.classList.add("dragging");
+  });
+  row.addEventListener("dragend", ()=>{
+    row.draggable = false;
+    row.classList.remove("dragging");
+    batchDragId = null;
+    list.querySelectorAll(".drop-before,.drop-after").forEach(r => r.classList.remove("drop-before","drop-after"));
+  });
+  row.addEventListener("dragover", e => {
+    if(!batchDragId || batchDragId === row.dataset.fid) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    const r = row.getBoundingClientRect();
+    const after = e.clientY > r.top + r.height/2;
+    row.classList.toggle("drop-after", after);
+    row.classList.toggle("drop-before", !after);
+  });
+  row.addEventListener("dragleave", ()=> row.classList.remove("drop-before","drop-after"));
+  row.addEventListener("drop", e => {
+    e.preventDefault();
+    const after = row.classList.contains("drop-after");
+    row.classList.remove("drop-before","drop-after");
+    const b = d.batch;
+    const from = b.files.findIndex(f => f.id === batchDragId);
+    if(from < 0) return;
+    const [moved] = b.files.splice(from, 1);
+    let to = b.files.findIndex(f => f.id === row.dataset.fid);
+    if(to < 0){ b.files.splice(from, 0, moved); return; }
+    if(after) to++;
+    b.files.splice(to, 0, moved);
+    b.sort = "manual";
+    batchRefresh();
+  });
+}
 
 function removeDesign(id){
   const idx = designs.findIndex(d => d.id === id);
@@ -1257,6 +1761,24 @@ function renderLayerList(){
   list.querySelectorAll("[data-needsconn]").forEach(b => {
     b.disabled = !connected || deviceStatus.busy || printBusy;
   });
+  updateBatchInfo();
+}
+
+// Nach Eingabe in X/Y/W/H: Felder, Größenangabe und Auswahl in-place
+// aktualisieren. Ein renderLayerList() würde die Inputs neu erzeugen und
+// beim Tab-Wechsel X → Y den Fokus verlieren.
+function refreshLayerInPlace(root, vals, size, id){
+  root.querySelectorAll(".layer-props input").forEach(o => {
+    const v = vals[o.dataset.f];
+    if(v != null) o.value = round1(v);
+  });
+  const meta = root.querySelector(".layer-head .meta");
+  if(meta) meta.textContent = fmtMM(size.w)+"×"+fmtMM(size.h);
+  activeId = id;
+  $("layerlist").querySelectorAll(".layer").forEach(l => {
+    const lid = l.classList.contains("wp") ? "wp" : l.dataset.id;
+    l.classList.toggle("active", lid === activeId);
+  });
 }
 
 function buildDesignLayer(d){
@@ -1270,11 +1792,16 @@ function buildDesignLayer(d){
   head.innerHTML = `
     <span class="chev">▶</span>
     <span class="title"></span>
+    ${d.batch ? `<span class="batchbadge" title="${t("batch.badge_title")}"></span>` : ""}
     <span class="meta">${fmtMM(mm.w)}×${fmtMM(mm.h)}</span>
     <button class="iconbtn ${d.visible?"":"off"}" data-act="vis" title="${t("layer.show_title")}">${d.visible?"👁":"🙈"}</button>
     <button class="iconbtn ${d.locked?"on":""}" data-act="lock" title="${t("layer.lock_title")}">${d.locked?"🔒":"🔓"}</button>
     <button class="iconbtn" data-act="del" title="${t("layer.remove_title")}">✕</button>`;
-  head.querySelector(".title").textContent = d.name;
+  head.querySelector(".title").textContent = (d.batch ? "📁 " : "") + d.name;
+  if(d.batch){
+    const done = d.batch.files.filter(f => f.done).length;
+    head.querySelector(".batchbadge").textContent = done+"/"+d.batch.files.length;
+  }
   head.addEventListener("click", e => {
     if(e.target.closest("[data-act]")) return;
     if(e.target.closest(".chev") || e.detail === 2){
@@ -1325,16 +1852,18 @@ function buildDesignLayer(d){
       const f = inp.dataset.f;
       const v = parseFloat(inp.value);
       if(!isFinite(v)) return;
-      if(f === "x") d.x = Math.max(0, Math.min(BED_W - mm.w, v));
-      else if(f === "y") d.y = Math.max(0, Math.min(BED_H - mm.h, v));
+      // negative Werte erlaubt: Überstand über die Arbeitsfläche hinaus
+      // wird beim Lasern abgeschnitten
+      if(f === "x") d.x = Math.max(-mm.w, Math.min(BED_W, v));
+      else if(f === "y") d.y = Math.max(-mm.h, Math.min(BED_H, v));
       else if(f === "w" && v > 0){
         d.scale = v / d.sizeMM.w;
       } else if(f === "h" && v > 0){
         d.scale = v / d.sizeMM.h;
       }
-      selectTarget(d.id);
+      const m2 = designMM(d);
+      refreshLayerInPlace(root, { x:d.x, y:d.y, w:m2.w, h:m2.h }, m2, d.id);
       updateStage();
-      renderLayerList();
       scheduleWsSave();
     });
     inp.addEventListener("click", e => e.stopPropagation());
@@ -1419,6 +1948,8 @@ function buildDesignLayer(d){
     inner.appendChild(row);
   }
 
+  if(d.batch) inner.appendChild(buildBatchSection(d));
+
   body.appendChild(inner);
   root.appendChild(body);
   return root;
@@ -1483,14 +2014,18 @@ function buildWorkpieceLayer(){
       const f = inp.dataset.f;
       const v = parseFloat(inp.value);
       if(!isFinite(v)) return;
-      if(f === "x") wp.x = Math.max(0, Math.min(BED_W - wp.w, v));
-      else if(f === "y") wp.y = Math.max(0, Math.min(BED_H - wp.h, v));
+      if(f === "x") wp.x = clampWpX(v);
+      else if(f === "y") wp.y = clampWpY(v);
       else if(f === "w") wp.w = Math.max(1, Math.min(BED_W, v));
       else if(f === "h") wp.h = Math.max(1, Math.min(BED_H, v));
       wp.visible = true;
-      selectTarget("wp");
+      updateStage(); // klemmt wp.x/y an die neue Größe
+      // Augen-Symbol in-place umschalten: ein Neuaufbau würde den Fokus beim
+      // Tab-Wechsel X → Y verlieren
+      const eye = root.querySelector('[data-act="vis"]');
+      if(eye){ eye.classList.remove("off"); eye.textContent = "👁"; }
+      refreshLayerInPlace(root, { x:wp.x, y:wp.y, w:wp.w, h:wp.h }, wp, "wp");
       updateStage();
-      renderLayerList();
       scheduleWsSave();
     });
     inp.addEventListener("click", e => e.stopPropagation());
@@ -1524,6 +2059,10 @@ function buildWorkpieceLayer(){
   return root;
 }
 function round1(v){ return Math.round(v*10)/10; }
+// Werkstück darf wie Designs über die Arbeitsfläche hinausragen (auch negativ);
+// gelasert wird ohnehin nur innerhalb der Fläche.
+function clampWpX(v){ return Math.max(-wp.w, Math.min(BED_W, v)); }
+function clampWpY(v){ return Math.max(-wp.h, Math.min(BED_H, v)); }
 
 /////////////////////// stage / placement ///////////////////////
 function wpActive(){ return wp.visible; }
@@ -1585,6 +2124,7 @@ function updateStage(){
     if(md){ const mm = designMM(md); markerBox = { x:md.x, y:md.y, w:mm.w, h:mm.h }; }
   }
   updateMarkers(markerBox);
+  updateHeadPos();
 
   if(activeId === "wp" && wp.visible){
     $("posinfo").textContent = t("bed.pos_workpiece", {x: fmtMM(wp.x), y: fmtMM(wp.y)});
@@ -1605,16 +2145,54 @@ function updateWorkpiece(){
   if(!wp.visible) return;
   const bed = $("bed").getBoundingClientRect();
   if(bed.width === 0) return;
-  wp.x = Math.max(0, Math.min(BED_W-wp.w, wp.x));
-  wp.y = Math.max(0, Math.min(BED_H-wp.h, wp.y));
+  wp.x = clampWpX(wp.x);
+  wp.y = clampWpY(wp.y);
   el.style.left = (wp.x/BED_W*bed.width)+"px";
   el.style.top  = (wp.y/BED_H*bed.height)+"px";
   el.style.width  = (wp.w/BED_W*bed.width)+"px";
   el.style.height = (wp.h/BED_H*bed.height)+"px";
+  // Beschriftung bei negativer Position in den sichtbaren Bereich schieben
+  const lbl = el.querySelector(".wplabel");
+  const wl = wp.x/BED_W*bed.width, wt = wp.y/BED_H*bed.height;
+  const lx = 6 + Math.max(0, -wl);
+  let ly = 3 + Math.max(0, -wt);
+  // nicht über die „⌂ Home (0,0)“-Beschriftung in der Ecke legen
+  if(wl + lx < 110 && wt + ly < 22) ly = 22 - wt;
+  lbl.style.left = lx+"px";
+  lbl.style.top  = ly+"px";
   el.classList.toggle("locked", wp.locked);
   el.classList.toggle("active", activeId === "wp");
   el.querySelector(".wplabel").textContent =
     t("workpiece.label", {w: fmtMM(wp.w), h: fmtMM(wp.h), x: fmtMM(wp.x), y: fmtMM(wp.y)})+(wp.locked ? " 🔒" : "");
+}
+
+// Geschätzte Kopfposition (Server zählt Home/Jog mit; die Maschine selbst
+// meldet keine Position). Unbekannt nach Verbinden, Entriegeln oder Abbruch.
+function updateHeadPos(){
+  const el = $("headpos");
+  const s = deviceStatus;
+  const show = s.state === "connected";
+  el.classList.toggle("show", show);
+  if(!show) return;
+  const bed = $("bed").getBoundingClientRect();
+  if(bed.width === 0) return;
+  const xmm = (s.pos_x_mils || 0) * 0.0254, ymm = (s.pos_y_mils || 0) * 0.0254;
+  // Anzeige an der Bettkante halten, Zahlen zeigen den echten Schätzwert
+  const cx = Math.max(0, Math.min(BED_W, xmm)), cy = Math.max(0, Math.min(BED_H, ymm));
+  const px = cx/BED_W*bed.width, py = cy/BED_H*bed.height;
+  el.querySelector(".hp-v").style.left = px+"px";
+  el.querySelector(".hp-h").style.top = py+"px";
+  const dot = el.querySelector(".hp-dot");
+  dot.style.left = px+"px"; dot.style.top = py+"px";
+  const lbl = el.querySelector(".hp-label");
+  lbl.style.left = px+"px"; lbl.style.top = py+"px";
+  lbl.classList.toggle("flipx", px > bed.width - 130);
+  lbl.classList.toggle("flipy", py > bed.height - 40);
+  el.classList.toggle("unknown", !s.pos_known);
+  el.classList.toggle("busy", !!s.busy);
+  lbl.textContent = s.busy ? t("head.busy")
+    : !s.pos_known ? t("head.unknown")
+    : t("head.label", {x: fmtMM(xmm), y: fmtMM(ymm)});
 }
 
 function updateMarkers(bbox){
@@ -1689,8 +2267,8 @@ function bindDesignInteractions(el, dRef){
     let ny = drag.oy + (e.clientY-drag.y)/bed.height*BED_H;
     nx = snapMM(nx, fine);
     ny = snapMM(ny, fine);
-    nx = Math.max(0, Math.min(BED_W-mm.w, nx));
-    ny = Math.max(0, Math.min(BED_H-mm.h, ny));
+    nx = Math.max(-mm.w, Math.min(BED_W, nx));
+    ny = Math.max(-mm.h, Math.min(BED_H, ny));
     if(clipMode() === "constrain"){
       const p = clampToWp(nx, ny, mm);
       nx = p.x; ny = p.y;
@@ -1746,8 +2324,8 @@ function bindDesignInteractions(el, dRef){
     let ny = drag.oy + (e.clientY-drag.y)/bed.height*BED_H;
     nx = snapMM(nx, fine);
     ny = snapMM(ny, fine);
-    wp.x = Math.max(0, Math.min(BED_W-wp.w, nx));
-    wp.y = Math.max(0, Math.min(BED_H-wp.h, ny));
+    wp.x = clampWpX(nx);
+    wp.y = clampWpY(ny);
     updateStage();
   });
   ["pointerup","pointercancel"].forEach(ev => el.addEventListener(ev, () => {
@@ -1777,8 +2355,8 @@ document.addEventListener("keydown", e => {
 
   if(activeId === "wp"){
     if(wp.locked || !wp.visible) return;
-    wp.x = Math.max(0, Math.min(BED_W-wp.w, wp.x + dx));
-    wp.y = Math.max(0, Math.min(BED_H-wp.h, wp.y + dy));
+    wp.x = clampWpX(wp.x + dx);
+    wp.y = clampWpY(wp.y + dy);
     updateStage(); renderLayerList(); scheduleWsSave();
     return;
   }
@@ -1786,8 +2364,8 @@ document.addEventListener("keydown", e => {
   if(!d || d.locked || !d.visible) return;
   const mm = designMM(d);
   let nx = d.x + dx, ny = d.y + dy;
-  nx = Math.max(0, Math.min(BED_W-mm.w, nx));
-  ny = Math.max(0, Math.min(BED_H-mm.h, ny));
+  nx = Math.max(-mm.w, Math.min(BED_W, nx));
+  ny = Math.max(-mm.h, Math.min(BED_H, ny));
   if(clipMode() === "constrain"){
     const p = clampToWp(nx, ny, mm);
     nx = p.x; ny = p.y;
@@ -1814,13 +2392,25 @@ function collectSettingsFor(d){
     offset_x_mm: d.x,
     offset_y_mm: d.y,
     scale: d.scale,
-    clip: clipMode() === "clip" ? {
-      x_mm: wp.x - d.x,
-      y_mm: wp.y - d.y,
-      w_mm: wp.w,
-      h_mm: wp.h
-    } : null
+    clip: computeClip(d)
   };
+}
+// Effektiver Clip in Design-Koordinaten: Werkstück-Fenster (im Modus "clip")
+// geschnitten mit der Arbeitsfläche. Überstand über die Arbeitsfläche —
+// z.B. bei negativer Position — wird nie gelasert.
+function computeClip(d){
+  if(!d.sizeMM) return null;
+  const mm = designMM(d);
+  let r = { x: -d.x, y: -d.y, w: BED_W, h: BED_H };
+  if(clipMode() === "clip"){
+    const x0 = Math.max(r.x, wp.x - d.x), y0 = Math.max(r.y, wp.y - d.y);
+    const x1 = Math.min(r.x + r.w, wp.x - d.x + wp.w);
+    const y1 = Math.min(r.y + r.h, wp.y - d.y + wp.h);
+    r = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+  } else if(d.x >= 0 && d.y >= 0 && d.x + mm.w <= BED_W && d.y + mm.h <= BED_H){
+    return null; // komplett auf der Fläche: kein Clip nötig
+  }
+  return { x_mm: r.x, y_mm: r.y, w_mm: r.w, h_mm: r.h };
 }
 function applyOpSettings(s){
   if(!s) return;
@@ -1835,6 +2425,7 @@ function applyOpSettings(s){
   if(s.dither != null) $("dither").checked = !!s.dither;
   if(s.invert != null) $("invert").checked = !!s.invert;
   if(s.bottom_up != null) $("bottomup").checked = !!s.bottom_up;
+  if(s.jog_feed_mmps != null) $("jogfeed").value = s.jog_feed_mmps > 0 ? String(s.jog_feed_mmps) : "";
 }
 
 /////////////////////// workspace ///////////////////////
@@ -1849,10 +2440,15 @@ function collectWsState(){
     },
     activeId,
     designs: designs.map(d => ({
-      id:d.id, name:d.name, svg:d.svg,
+      id:d.id, name:d.name, svg: d.batch ? null : d.svg,
       x:d.x, y:d.y, scale:d.scale,
       visible:d.visible, locked:d.locked, expanded:d.expanded, markers:d.markers,
-      colorOps:d.colorOps
+      colorOps:d.colorOps,
+      batch: d.batch ? {
+        folder: d.batch.folder, sort: d.batch.sort, onlyOpen: d.batch.onlyOpen,
+        currentId: d.batch.currentId, shownId: d.batch.shownId,
+        files: d.batch.files.map(f => ({ id:f.id, name:f.name, svg:f.svg, done:f.done, w:f.w, h:f.h, colors:f.colors }))
+      } : undefined
     })),
     // globale Op-Parameter (ohne Position)
     settings: (()=>{
@@ -1906,6 +2502,16 @@ async function applyWsState(st, legacySvg){
     designs = [];
     // reverse + unshift = Originalreihenfolge (erstes = oberster Layer)
     for(const raw of [...st.designs].reverse()){
+      if(raw.batch && Array.isArray(raw.batch.files)){
+        const rb = raw.batch;
+        await addBatchDesign({
+          folder: rb.folder || raw.name || t("batch.default_name"),
+          sort: rb.sort || "natural", onlyOpen: !!rb.onlyOpen,
+          currentId: rb.currentId || null, shownId: rb.shownId || null,
+          files: rb.files.map(f => ({ ...f, done: !!f.done, colors: f.colors || [] }))
+        }, raw);
+        continue;
+      }
       if(!raw.svg) continue;
       await addDesignFromSvg(raw.svg, (raw.name || "design")+".svg", raw);
     }
@@ -1924,17 +2530,28 @@ async function applyWsState(st, legacySvg){
   }
 }
 
-$("btnreset").addEventListener("click", async ()=>{
-  if(!confirm(t("reset.confirm"))) return;
+// Leere Arbeitsfläche: Workspace auf dem Server löschen und neu laden (lädt
+// dabei die gespeicherten Standardwerte). Gespeicherte Projekte bleiben.
+async function clearWorkspace(confirmKey){
+  if(printBusy || deviceStatus.busy){ toast(t("project.new_busy"), true); return; }
+  const hasContent = designs.length || wp.visible || $("jobname").value.trim();
+  if(hasContent && !confirm(t(confirmKey))) return;
+  // ausstehendes Auto-Speichern darf den gelöschten Stand nicht zurückschreiben
+  clearTimeout(wsTimer);
+  restoring = true;
   try { await api("/api/workspace", {method:"DELETE"}); } catch(e){}
+  history.replaceState(null, "", location.pathname);
   location.reload();
-});
+}
+$("btnreset").addEventListener("click", ()=> clearWorkspace("reset.confirm"));
+$("nav_new").addEventListener("click", ()=> clearWorkspace("project.new_confirm"));
 
 /////////////////////// defaults ///////////////////////
 $("btndefaults").addEventListener("click", async ()=>{
   const dummy = { x:0,y:0,scale:1,palette:[],colorOps:{} };
   const d = collectSettingsFor(dummy);
   delete d.color_rules; delete d.offset_x_mm; delete d.offset_y_mm; delete d.scale; delete d.clip;
+  d.jog_feed_mmps = parseFloat($("jogfeed").value) || 0;
   try {
     await put("/api/defaults", d);
     toast(t("defaults.saved"));
@@ -1945,6 +2562,7 @@ $("btndefaults").addEventListener("click", async ()=>{
 function printableDesigns(){
   return designs.filter(d => {
     if(!d.visible) return false;
+    if(d.batch && !batchCurrent(d)) return false; // Batch fertig
     return d.palette.some(c => (d.colorOps[c.color] || "raster") !== "ignore");
   });
 }
@@ -1955,6 +2573,7 @@ async function drainPrintQueue(){
   const job = printQueue.shift();
   try {
     const r = await post("/api/print", job);
+    printRunning = job;
     job._estimate = r.estimate_s || 0;
     // Gesamtschätzung: aktueller Job + Rest der Queue (noch ohne Slice-Werte → grob)
     printEta.estimate_s = (r.estimate_s || 0) + printQueue.length * (r.estimate_s || 60);
@@ -1968,26 +2587,27 @@ async function drainPrintQueue(){
   }
 }
 
-$("btnprint").addEventListener("click", async ()=>{
+async function startPrint(){
+  if(printBusy || deviceStatus.busy) return;
   const list = printableDesigns();
   if(!list.length){ toast(t("print.no_designs"), true); return; }
-  const summary = list.map(d => {
-    const mm = designMM(d);
-    return t("print.summary_line", {name: d.name, w: fmtMM(mm.w), h: fmtMM(mm.h), x: fmtMM(d.x), y: fmtMM(d.y)});
-  }).join("\n");
-  if(!confirm(t("print.confirm", {summary}))) return;
 
   const btn = $("btnprint");
   btn.disabled = true; btn.textContent = t("btn.slicing");
+  $("hdrprint").disabled = true;
   try {
     // Grobe ETA: jedes Design einzeln anfragen wäre teuer – wir starten die Queue
     // und summieren die Schätzungen aus den Antworten.
-    printQueue = list.map(d => ({
-      name: ($("jobname").value.trim() || d.name),
-      svg: d.svg,
-      settings: collectSettingsFor(d),
-      _estimate: 0
-    }));
+    printQueue = list.map(d => {
+      const f = d.batch ? batchCurrent(d) : null;
+      return {
+        name: f ? f.name : ($("jobname").value.trim() || d.name),
+        svg: d.svg,
+        settings: collectSettingsFor(d),
+        _estimate: 0,
+        _batch: f ? { designId: d.id, fileId: f.id } : null
+      };
+    });
     // Namens-Suffix bei mehreren
     if(printQueue.length > 1){
       printQueue.forEach((j,i) => { j.name = j.name+" ("+(i+1)+"/"+printQueue.length+")"; });
@@ -2008,7 +2628,19 @@ $("btnprint").addEventListener("click", async ()=>{
     btn.textContent = t("btn.print");
     applyStatus(deviceStatus);
   }
+}
+$("btnprint").addEventListener("click", startPrint);
+$("hdrprint").addEventListener("click", startPrint);
+
+function applyQuickPrint(on){
+  document.body.classList.toggle("quickprint", on);
+  $("quickprint").checked = on;
+}
+$("quickprint").addEventListener("change", e => {
+  applyQuickPrint(e.target.checked);
+  try { localStorage.setItem("rk40.quickprint", e.target.checked ? "1" : "0"); } catch(err){}
 });
+try { applyQuickPrint(localStorage.getItem("rk40.quickprint") === "1"); } catch(err){}
 
 $("btnsave").addEventListener("click", async ()=>{
   const d = activeDesign() || designs[0];
@@ -2164,7 +2796,11 @@ document.querySelectorAll("[data-jog]").forEach(b => {
   b.addEventListener("click", ()=>{
     const [sx,sy] = b.dataset.jog.split(",").map(Number);
     const step = parseFloat($("jogstep").value);
-    post("/api/device/move", { dx_mm:sx*step, dy_mm:sy*step }).catch(e=>toast(e.message,true));
+    const feed = parseFloat($("jogfeed").value);
+    post("/api/device/move", {
+      dx_mm:sx*step, dy_mm:sy*step,
+      feed_mmps: isFinite(feed) && feed > 0 ? feed : null
+    }).catch(e=>toast(e.message,true));
   });
 });
 

@@ -180,6 +180,34 @@ impl Egv {
         }
     }
 
+    /// Speed-limited jog program: one laser-off move executed at `feed`
+    /// instead of the board's full rapid speed ("jog compensation" — a
+    /// full-speed rapid can shake the machine enough to shift the workpiece).
+    /// dx/dy in mils, y positive up (EGV convention). Uses the same program
+    /// structure as the vector mode of `make_egv_data`.
+    pub fn make_slow_move_data(&mut self, dxmils: i64, dymils: i64, feed: f64, board: Board) {
+        if dxmils.abs() + dymils.abs() == 0 {
+            return;
+        }
+        self.write(b'I');
+        let speed = self.make_speed(feed, board, 0);
+        for code in speed {
+            self.write(code);
+        }
+        self.write(b'N');
+        self.write(if dymils <= 0 { DOWN } else { UP });
+        self.write(if dxmils >= 0 { RIGHT } else { LEFT });
+        self.write(b'S');
+        self.write(b'1');
+        self.write(b'E');
+        self.make_cut_line(dxmils, dymils, false);
+        self.flush(Some(false));
+        self.write(b'F');
+        self.write(b'N');
+        self.write(b'S');
+        self.write(b'E');
+    }
+
     fn ecoord_adj(&self, p: &ECoord, scale: f64, flip_x_offset: f64) -> (i64, i64, i64) {
         let e0 = if flip_x_offset > 0.0 {
             ((flip_x_offset - p.x) * scale).round() as i64
@@ -545,5 +573,25 @@ mod tests {
         let s: Vec<u8> = e.data;
         assert_eq!(s[0], b'I');
         assert_eq!(*s.last().unwrap(), b'P');
+    }
+
+    #[test]
+    fn slow_jog_program() {
+        let mut e = Egv::new();
+        e.make_slow_move_data(1000, -500, 50.0, Board::M2);
+        let s = e.data;
+        assert_eq!(s[0], b'I');
+        // vector speed code follows the init byte
+        assert_eq!(s[1], b'C');
+        assert_eq!(s[2], b'V');
+        // program ends like a job, head stays at the target
+        assert!(s.ends_with(b"FNSE"));
+        // laser must never turn on during a jog
+        assert!(!s.contains(&ON));
+
+        // zero move produces no program
+        let mut e2 = Egv::new();
+        e2.make_slow_move_data(0, 0, 50.0, Board::M2);
+        assert!(e2.data.is_empty());
     }
 }

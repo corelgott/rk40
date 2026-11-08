@@ -3,7 +3,7 @@
 use crate::device::{Command, DeviceHandle};
 use crate::jobs::JobStore;
 use crate::planner::{extract_palette, plan_markers, plan_svg, PrepareSettings};
-use axum::extract::{Path, State};
+use axum::extract::{DefaultBodyLimit, Path, State};
 use axum::http::{header, StatusCode};
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{Html, IntoResponse, Response};
@@ -50,6 +50,9 @@ pub fn router(state: SharedState) -> Router {
         .route("/api/jobs/{id}/source.svg", get(job_source))
         .route("/api/jobs/{id}/download.egv", get(job_download_egv))
         .route("/api/jobs/{id}/print", post(print_job))
+        // The workspace state carries every SVG on the stage, including all
+        // files of a batch; axum's 2 MB default is far too small for that.
+        .layer(DefaultBodyLimit::max(256 * 1024 * 1024))
         .with_state(state)
 }
 
@@ -129,6 +132,10 @@ async fn device_pause(State(state): State<SharedState>) -> Response {
 struct MoveReq {
     dx_mm: f64,
     dy_mm: f64,
+    /// optional speed limit in mm/s (jog compensation); absent or 0 = full
+    /// rapid speed
+    #[serde(default)]
+    feed_mmps: Option<f64>,
 }
 
 async fn device_move(State(state): State<SharedState>, Json(req): Json<MoveReq>) -> Response {
@@ -137,7 +144,11 @@ async fn device_move(State(state): State<SharedState>, Json(req): Json<MoveReq>)
     }
     let dx = (req.dx_mm / 25.4 * 1000.0).round() as i64;
     let dy = (req.dy_mm / 25.4 * 1000.0).round() as i64;
-    send_cmd(&state, Command::RapidMove(dx, dy))
+    let feed = req
+        .feed_mmps
+        .filter(|f| *f > 0.0)
+        .map(|f| f.clamp(0.5, 240.0));
+    send_cmd(&state, Command::RapidMove(dx, dy, feed))
 }
 
 //////////////////////////////////////////////////////////////////////////////
