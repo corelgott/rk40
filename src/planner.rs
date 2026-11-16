@@ -122,6 +122,21 @@ pub struct PrepareSettings {
     /// outside this rectangle are not lasered and not emitted at all.
     #[serde(default)]
     pub clip: Option<ClipRect>,
+    /// Cut inner contours before the contours that enclose them, so a part
+    /// is not cut loose before its holes. Only affects vector cut.
+    #[serde(default = "yes")]
+    pub inside_first: bool,
+    /// Reorder vector polylines to shorten travel: nearest next line, open
+    /// lines may run backwards, closed contours start at their nearest point.
+    #[serde(default = "yes")]
+    pub optimize_paths: bool,
+    /// Travel speed (mm/s) for laser-off moves; 0 = board's full-speed rapid.
+    #[serde(default)]
+    pub rapid_feed_mmps: f64,
+}
+
+fn yes() -> bool {
+    true
 }
 
 fn default_raster_step() -> i64 {
@@ -434,23 +449,7 @@ pub fn plan_svg(svg_text: &str, settings: &PrepareSettings) -> Result<PlannedJob
     ////////////////////////////////////////////////////////////
     // Collect vector polylines (in svg px, y down) per op
     ////////////////////////////////////////////////////////////
-    let mut cut_lines: Vec<Vec<(f64, f64)>> = Vec::new();
-    let mut eng_lines: Vec<Vec<(f64, f64)>> = Vec::new();
-    collect_vector(tree.root(), &rules, &mut eng_lines, &mut cut_lines);
-
-    // Workpiece clipping for vector paths (raster is masked in rasterize()).
-    // Clip rect is in design mm; polylines are in svg px.
-    if let Some(clip) = settings.clip {
-        let px_per_mm = 96.0 / (MM_PER_INCH * scale);
-        let rect = (
-            clip.x_mm * px_per_mm,
-            clip.y_mm * px_per_mm,
-            (clip.x_mm + clip.w_mm) * px_per_mm,
-            (clip.y_mm + clip.h_mm) * px_per_mm,
-        );
-        cut_lines = clip_polylines(&cut_lines, rect);
-        eng_lines = clip_polylines(&eng_lines, rect);
-    }
+    let (eng_lines, cut_lines) = vector_lines(&tree, settings, &rules, scale);
 
     ////////////////////////////////////////////////////////////
     // Raster scanlines
@@ -467,10 +466,18 @@ pub fn plan_svg(svg_text: &str, settings: &PrepareSettings) -> Result<PlannedJob
     ////////////////////////////////////////////////////////////
     let mut data: Vec<u8> = vec![b'I'];
     let mut estimate_s = 0.0f64;
+    let rapid_feed = if settings.rapid_feed_mmps > 0.0 {
+        settings.rapid_feed_mmps.clamp(1.0, 400.0)
+    } else {
+        0.0
+    };
+    let px_per_mm = 96.0 / (MM_PER_INCH * scale);
+    let home_px = (-settings.offset_x_mm * px_per_mm, -settings.offset_y_mm * px_per_mm);
     let mut any = false;
 
     if let Some(ref r) = raster {
         let mut egv = Egv::new();
+        egv.rapid_feed = rapid_feed;
         let step = settings.raster_step_mils.max(1);
         egv.make_egv_data(
             &r.ecoords,
@@ -499,8 +506,13 @@ pub fn plan_svg(svg_text: &str, settings: &PrepareSettings) -> Result<PlannedJob
             continue;
         }
         let mut egv = Egv::new();
+        egv.rapid_feed = rapid_feed;
         egv.make_egv_data(&ecoords, start_x, start_y, feed, Board::M2, 0)?;
-        estimate_s += (len_mm / feed.max(0.1)) * 1.15 * passes.max(1) as f64;
+        // Travel at the rapid feed, or ~100 mm/s for the board's own rapid
+        // (K40 Whisperer's estimate).
+        let travel_mm = travel_px(lines, home_px) / px_per_mm;
+        let travel_feed = if rapid_feed > 0.0 { rapid_feed } else { 100.0 };
+        estimate_s += ((len_mm / feed.max(0.1)) * 1.15 + travel_mm / travel_feed) * passes.max(1) as f64;
         append_block(&mut data, &egv.data, passes);
         any = true;
     }
@@ -521,6 +533,295 @@ pub fn plan_svg(svg_text: &str, settings: &PrepareSettings) -> Result<PlannedJob
         preview_png,
         estimate_s,
     })
+}
+
+/// Vector polylines (svg px, y down) for engrave and cut, clipped to the
+/// workpiece and — for cut — put into inside-first order.
+fn vector_lines(
+    tree: &usvg::Tree,
+    settings: &PrepareSettings,
+    rules: &RuleSet,
+    scale: f64,
+) -> (Vec<Polyline>, Vec<Polyline>) {
+    let mut cut_lines: Vec<Vec<(f64, f64)>> = Vec::new();
+    let mut eng_lines: Vec<Vec<(f64, f64)>> = Vec::new();
+    collect_vector(tree.root(), rules, &mut eng_lines, &mut cut_lines);
+
+    // Workpiece clipping for vector paths (raster is masked in rasterize()).
+    // Clip rect is in design mm; polylines are in svg px.
+    if let Some(clip) = settings.clip {
+        let px_per_mm = 96.0 / (MM_PER_INCH * scale);
+        let rect = (
+            clip.x_mm * px_per_mm,
+            clip.y_mm * px_per_mm,
+            (clip.x_mm + clip.w_mm) * px_per_mm,
+            (clip.y_mm + clip.h_mm) * px_per_mm,
+        );
+        cut_lines = clip_polylines(&cut_lines, rect);
+        eng_lines = clip_polylines(&eng_lines, rect);
+    }
+    if settings.optimize_paths {
+        // Every block starts with the head at home (bed origin), which in
+        // design px is the negated placement offset.
+        let px_per_mm = 96.0 / (MM_PER_INCH * scale);
+        let home = (-settings.offset_x_mm * px_per_mm, -settings.offset_y_mm * px_per_mm);
+        eng_lines = optimize_order(eng_lines, home, false);
+        cut_lines = optimize_order(cut_lines, home, settings.inside_first);
+    } else if settings.inside_first {
+        cut_lines = order_inside_first(cut_lines);
+    }
+    (eng_lines, cut_lines)
+}
+
+type Polyline = Vec<(f64, f64)>;
+
+/// Max gap between first and last point (svg px) for a polyline to count as
+/// a closed contour.
+const CLOSE_TOL_PX: f64 = 0.1;
+
+fn is_closed(line: &[(f64, f64)]) -> bool {
+    match (line.first(), line.last()) {
+        (Some(a), Some(b)) if line.len() >= 4 => (a.0 - b.0).hypot(a.1 - b.1) <= CLOSE_TOL_PX,
+        _ => false,
+    }
+}
+
+fn bbox_of(line: &[(f64, f64)]) -> (f64, f64, f64, f64) {
+    line.iter().fold(
+        (f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY),
+        |b, &(x, y)| (b.0.min(x), b.1.min(y), b.2.max(x), b.3.max(y)),
+    )
+}
+
+fn point_in_polygon(p: (f64, f64), poly: &[(f64, f64)]) -> bool {
+    let mut inside = false;
+    let mut j = poly.len() - 1;
+    for i in 0..poly.len() {
+        let (xi, yi) = poly[i];
+        let (xj, yj) = poly[j];
+        if (yi > p.1) != (yj > p.1) && p.0 < (xj - xi) * (p.1 - yi) / (yj - yi) + xi {
+            inside = !inside;
+        }
+        j = i;
+    }
+    inside
+}
+
+/// Whether polyline `b` lies inside closed contour `a`. Tests up to 16
+/// segment midpoints of `b` and takes the majority, so a vertex that happens
+/// to touch `a` does not flip the result.
+fn polyline_inside(b: &[(f64, f64)], a: &[(f64, f64)]) -> bool {
+    let segs = b.len().saturating_sub(1);
+    if segs == 0 {
+        return false;
+    }
+    let samples = segs.min(16);
+    let mut hits = 0;
+    for k in 0..samples {
+        let i = k * segs / samples;
+        let p = mid(b[i], b[i + 1]);
+        if point_in_polygon(p, a) {
+            hits += 1;
+        }
+    }
+    hits * 2 > samples
+}
+
+/// Cut order "inside first" (K40 Whisperer's inside_check): a closed contour
+/// is cut only after everything that lies inside it, so a part never comes
+/// loose before its holes and slots are done. Open polylines may lie inside
+/// a contour but never contain anything. Apart from that, document order is
+/// kept: each contour is followed directly by the next part's inner cuts.
+fn order_inside_first(lines: Vec<Polyline>) -> Vec<Polyline> {
+    let n = lines.len();
+    if n < 2 {
+        return lines;
+    }
+    let contains = containment(&lines);
+
+    // Post-order DFS over "contains" (iterative: nesting can be deep).
+    // Cycles (duplicate contours) are broken by the visited mark.
+    let mut visited = vec![false; n];
+    let mut order = Vec::with_capacity(n);
+    for root in 0..n {
+        if visited[root] {
+            continue;
+        }
+        visited[root] = true;
+        let mut stack: Vec<(usize, usize)> = vec![(root, 0)];
+        while let Some(&mut (node, ref mut next)) = stack.last_mut() {
+            if let Some(&child) = contains[node].get(*next) {
+                *next += 1;
+                if !visited[child] {
+                    visited[child] = true;
+                    stack.push((child, 0));
+                }
+            } else {
+                order.push(node);
+                stack.pop();
+            }
+        }
+    }
+
+    let mut slots: Vec<Option<Polyline>> = lines.into_iter().map(Some).collect();
+    order.into_iter().filter_map(|i| slots[i].take()).collect()
+}
+
+/// For each closed contour, the indices of all polylines lying inside it
+/// (transitively: a hole inside a ring inside a frame is listed for both).
+fn containment(lines: &[Polyline]) -> Vec<Vec<usize>> {
+    const EPS: f64 = 1e-6;
+    let n = lines.len();
+    let bbox: Vec<_> = lines.iter().map(|l| bbox_of(l)).collect();
+    let mut contains: Vec<Vec<usize>> = vec![Vec::new(); n];
+    for a in 0..n {
+        if !is_closed(&lines[a]) {
+            continue;
+        }
+        let ba = bbox[a];
+        for (b, bb) in bbox.iter().enumerate() {
+            if a == b
+                || bb.0 < ba.0 - EPS
+                || bb.1 < ba.1 - EPS
+                || bb.2 > ba.2 + EPS
+                || bb.3 > ba.3 + EPS
+            {
+                continue;
+            }
+            if polyline_inside(&lines[b], &lines[a]) {
+                contains[a].push(b);
+            }
+        }
+    }
+    contains
+}
+
+fn dist(a: (f64, f64), b: (f64, f64)) -> f64 {
+    (a.0 - b.0).hypot(a.1 - b.1)
+}
+
+/// Distance from `p` to a bbox (0 inside): a lower bound for the distance to
+/// any point of the polyline, used to skip candidates cheaply.
+fn bbox_dist(p: (f64, f64), b: (f64, f64, f64, f64)) -> f64 {
+    let dx = (b.0 - p.0).max(0.0).max(p.0 - b.2);
+    let dy = (b.1 - p.1).max(0.0).max(p.1 - b.3);
+    dx.hypot(dy)
+}
+
+/// Best way to enter a polyline from `p`: (distance, entry). Entry is
+/// `Fwd`, `Rev` (open line run backwards) or `At(k)` (closed contour
+/// started at vertex k).
+#[derive(Clone, Copy)]
+enum Entry {
+    Fwd,
+    Rev,
+    At(usize),
+}
+
+fn best_entry(p: (f64, f64), line: &[(f64, f64)]) -> (f64, Entry) {
+    if is_closed(line) {
+        let mut best = (f64::INFINITY, Entry::Fwd);
+        for (k, &q) in line[..line.len() - 1].iter().enumerate() {
+            let d = dist(p, q);
+            if d < best.0 {
+                best = (d, Entry::At(k));
+            }
+        }
+        best
+    } else {
+        let df = dist(p, line[0]);
+        let dr = dist(p, line[line.len() - 1]);
+        if dr < df {
+            (dr, Entry::Rev)
+        } else {
+            (df, Entry::Fwd)
+        }
+    }
+}
+
+fn apply_entry(mut line: Polyline, e: Entry) -> Polyline {
+    match e {
+        Entry::Fwd => line,
+        Entry::Rev => {
+            line.reverse();
+            line
+        }
+        Entry::At(0) => line,
+        Entry::At(k) => {
+            line.pop(); // closing point == first point
+            line.rotate_left(k);
+            line.push(line[0]);
+            line
+        }
+    }
+}
+
+/// Travel optimisation (greedy nearest neighbour, like K40 Whisperer's
+/// Sort_Paths, plus free direction/start point): starting at `start`, always
+/// continue with the closest remaining polyline. With `inside_first`, a
+/// contour only becomes eligible once everything inside it is done.
+fn optimize_order(lines: Vec<Polyline>, start: (f64, f64), inside_first: bool) -> Vec<Polyline> {
+    let n = lines.len();
+    if n == 0 {
+        return lines;
+    }
+    let bbox: Vec<_> = lines.iter().map(|l| bbox_of(l)).collect();
+    let mut pending = vec![0usize; n];
+    let mut parents: Vec<Vec<usize>> = vec![Vec::new(); n];
+    if inside_first {
+        for (a, inner) in containment(&lines).into_iter().enumerate() {
+            pending[a] = inner.len();
+            for b in inner {
+                parents[b].push(a);
+            }
+        }
+    }
+
+    let mut slots: Vec<Option<Polyline>> = lines.into_iter().map(Some).collect();
+    let mut remaining: Vec<usize> = (0..n).collect();
+    let mut out = Vec::with_capacity(n);
+    let mut pos = start;
+    while !remaining.is_empty() {
+        // Ready candidates; if none (duplicate contours contain each other),
+        // fall back to all remaining so the loop always progresses.
+        let any_ready = remaining.iter().any(|&i| pending[i] == 0);
+        let mut best: Option<(f64, usize, Entry)> = None;
+        for (ri, &i) in remaining.iter().enumerate() {
+            if any_ready && pending[i] != 0 {
+                continue;
+            }
+            let bound = best.map_or(f64::INFINITY, |b| b.0);
+            if bbox_dist(pos, bbox[i]) >= bound {
+                continue;
+            }
+            let line = slots[i].as_deref().unwrap_or(&[]);
+            let (d, e) = best_entry(pos, line);
+            if d < bound {
+                best = Some((d, ri, e));
+            }
+        }
+        let (_, ri, entry) = best.expect("remaining is not empty");
+        let i = remaining.swap_remove(ri);
+        let line = apply_entry(slots[i].take().unwrap_or_default(), entry);
+        pos = *line.last().unwrap_or(&pos);
+        out.push(line);
+        for &p in &parents[i] {
+            pending[p] = pending[p].saturating_sub(1);
+        }
+    }
+    out
+}
+
+/// Laser-off travel length (px) of polylines run in order from `start` and
+/// back to `start` at the end.
+fn travel_px(lines: &[Polyline], start: (f64, f64)) -> f64 {
+    let mut pos = start;
+    let mut total = 0.0;
+    for l in lines.iter().filter(|l| l.len() >= 2) {
+        total += dist(pos, l[0]);
+        pos = l[l.len() - 1];
+    }
+    total + dist(pos, start)
 }
 
 /// Positioning markers: four small L-shaped corner marks on the outer
@@ -1224,6 +1525,9 @@ mod tests {
             offset_y_mm: 0.0,
             scale: 1.0,
             clip: None,
+            inside_first: true,
+            optimize_paths: true,
+            rapid_feed_mmps: 0.0,
         }
     }
 
@@ -1504,5 +1808,206 @@ mod tests {
         assert!(names.contains(&"#ff0000"));
         assert!((w - 25.4).abs() < 0.01);
         assert!((h - 25.4).abs() < 0.01);
+    }
+
+    /// Cut polylines of `svg` (red = cut, blue = engrave) as their bboxes,
+    /// in cut order.
+    fn cut_lines_of(svg: &str, s: &mut PrepareSettings) -> Vec<Polyline> {
+        s.mode = None;
+        s.color_rules = vec![
+            ColorRule { color: "#ff0000".into(), op: OpKind::VectorCut },
+            ColorRule { color: "#0000ff".into(), op: OpKind::VectorEngrave },
+        ];
+        let tree = usvg::Tree::from_str(svg, &svg_options()).unwrap();
+        let rules = RuleSet::from_settings(s);
+        vector_lines(&tree, s, &rules, 1.0).1
+    }
+
+    /// Bboxes of the cut polylines in cut order, document-order based
+    /// (travel optimisation off).
+    fn cut_order(svg: &str, s: &mut PrepareSettings) -> Vec<(f64, f64, f64, f64)> {
+        s.optimize_paths = false;
+        cut_lines_of(svg, s).iter().map(|l| bbox_of(l)).collect()
+    }
+
+    fn near(a: (f64, f64), b: (f64, f64)) -> bool {
+        dist(a, b) < 0.01
+    }
+
+    #[test]
+    fn optimize_picks_nearest_and_reverses() {
+        // document order: far, near, middle (middle drawn right to left)
+        let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+            <path d="M80 80 H90" fill="none" stroke="#ff0000"/>
+            <path d="M5 5 H15" fill="none" stroke="#ff0000"/>
+            <path d="M50 40 H40" fill="none" stroke="#ff0000"/>
+        </svg>"##;
+        let lines = cut_lines_of(svg, &mut settings());
+        let firsts: Vec<_> = lines.iter().map(|l| l[0]).collect();
+        assert!(near(firsts[0], (5.0, 5.0)));
+        assert!(near(firsts[1], (40.0, 40.0)), "middle line runs reversed");
+        assert!(near(firsts[2], (80.0, 80.0)));
+    }
+
+    #[test]
+    fn optimize_rotates_closed_contour() {
+        let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+            <path d="M90 90 H50 V50 H90 Z" fill="none" stroke="#ff0000"/>
+        </svg>"##;
+        let lines = cut_lines_of(svg, &mut settings());
+        let l = &lines[0];
+        assert!(near(l[0], (50.0, 50.0)), "starts at corner nearest home");
+        assert!(near(l[l.len() - 1], (50.0, 50.0)), "still closed");
+        assert_eq!(l.len(), 5);
+    }
+
+    #[test]
+    fn optimize_respects_inside_first() {
+        // frame first in the document, then a far and a near hole
+        let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+            <rect x="5" y="5" width="86" height="86" fill="none" stroke="#ff0000"/>
+            <rect x="70" y="70" width="10" height="10" fill="none" stroke="#ff0000"/>
+            <rect x="10" y="10" width="10" height="10" fill="none" stroke="#ff0000"/>
+        </svg>"##;
+        let lines = cut_lines_of(svg, &mut settings());
+        let order: Vec<_> = lines.iter().map(|l| (bbox_of(l).0.round(), width(&bbox_of(l)))).collect();
+        assert_eq!(order, vec![(10.0, 10.0), (70.0, 10.0), (5.0, 86.0)]);
+        // the frame starts at the corner nearest the last hole
+        assert!(near(lines[2][0], (91.0, 91.0)));
+    }
+
+    #[test]
+    fn optimize_shortens_travel() {
+        // zig-zag document order across the design
+        let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+            <path d="M5 5 H10" fill="none" stroke="#ff0000"/>
+            <path d="M85 85 H90" fill="none" stroke="#ff0000"/>
+            <path d="M5 10 H10" fill="none" stroke="#ff0000"/>
+            <path d="M85 80 H90" fill="none" stroke="#ff0000"/>
+            <path d="M5 15 H10" fill="none" stroke="#ff0000"/>
+        </svg>"##;
+        let mut s = settings();
+        let optimized = cut_lines_of(svg, &mut s);
+        s.optimize_paths = false;
+        let plain = cut_lines_of(svg, &mut s);
+        let t_opt = travel_px(&optimized, (0.0, 0.0));
+        let t_plain = travel_px(&plain, (0.0, 0.0));
+        assert!(t_opt < t_plain * 0.6, "{t_opt} vs {t_plain}");
+    }
+
+    fn width(b: &(f64, f64, f64, f64)) -> f64 {
+        (b.2 - b.0).round()
+    }
+
+    #[test]
+    fn inside_first_hole_before_outline() {
+        let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+            <rect x="5" y="5" width="86" height="86" fill="none" stroke="#ff0000"/>
+            <circle cx="48" cy="48" r="10" fill="none" stroke="#ff0000"/>
+        </svg>"##;
+        let order = cut_order(svg, &mut settings());
+        assert_eq!(order.iter().map(width).collect::<Vec<_>>(), vec![20.0, 86.0]);
+    }
+
+    #[test]
+    fn inside_first_off_keeps_document_order() {
+        let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+            <rect x="5" y="5" width="86" height="86" fill="none" stroke="#ff0000"/>
+            <circle cx="48" cy="48" r="10" fill="none" stroke="#ff0000"/>
+        </svg>"##;
+        let mut s = settings();
+        s.inside_first = false;
+        let order = cut_order(svg, &mut s);
+        assert_eq!(order.iter().map(width).collect::<Vec<_>>(), vec![86.0, 20.0]);
+    }
+
+    #[test]
+    fn inside_first_three_levels() {
+        // frame, ring inside it, hole inside the ring — document order outer→inner
+        let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+            <rect x="2" y="2" width="92" height="92" fill="none" stroke="#ff0000"/>
+            <rect x="20" y="20" width="56" height="56" fill="none" stroke="#ff0000"/>
+            <rect x="40" y="40" width="16" height="16" fill="none" stroke="#ff0000"/>
+        </svg>"##;
+        let order = cut_order(svg, &mut settings());
+        assert_eq!(order.iter().map(width).collect::<Vec<_>>(), vec![16.0, 56.0, 92.0]);
+    }
+
+    #[test]
+    fn inside_first_subpaths_of_one_path() {
+        // like the gift tag: one <path>, outline first, then two holes;
+        // a second separate part follows and keeps its place after the first
+        let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 96" width="200" height="96">
+            <path fill="none" stroke="#ff0000"
+                d="M5 5 H91 V91 H5 Z M20 20 H30 V30 H20 Z M50 50 H70 V60 H50 Z"/>
+            <path fill="none" stroke="#ff0000" d="M105 5 H195 V91 H105 Z M140 40 H144 V44 H140 Z"/>
+            <path fill="none" stroke="#0000ff" d="M10 80 H80"/>
+        </svg>"##;
+        let order = cut_order(svg, &mut settings());
+        assert_eq!(
+            order.iter().map(width).collect::<Vec<_>>(),
+            vec![10.0, 20.0, 86.0, 4.0, 90.0]
+        );
+    }
+
+    #[test]
+    fn inside_first_open_line_before_contour() {
+        let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+            <rect x="5" y="5" width="86" height="86" fill="none" stroke="#ff0000"/>
+            <path d="M30 48 H66" fill="none" stroke="#ff0000"/>
+        </svg>"##;
+        let order = cut_order(svg, &mut settings());
+        assert_eq!(order.iter().map(width).collect::<Vec<_>>(), vec![36.0, 86.0]);
+    }
+
+    #[test]
+    fn inside_first_with_clip() {
+        // clip keeps the whole frame and hole but cuts off the right part
+        let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 96" width="200" height="96">
+            <rect x="5" y="5" width="86" height="86" fill="none" stroke="#ff0000"/>
+            <rect x="40" y="40" width="10" height="10" fill="none" stroke="#ff0000"/>
+            <rect x="150" y="5" width="40" height="40" fill="none" stroke="#ff0000"/>
+        </svg>"##;
+        let mut s = settings();
+        // 96 px = 25.4 mm → clip to x < 100 px
+        s.clip = Some(ClipRect { x_mm: 0.0, y_mm: 0.0, w_mm: 100.0 / 96.0 * 25.4, h_mm: 25.4 });
+        let order = cut_order(svg, &mut s);
+        assert_eq!(order.iter().map(width).collect::<Vec<_>>(), vec![10.0, 86.0]);
+    }
+
+    /// Prints the cut order of an SVG file (bbox per polyline). Run with:
+    ///   RK40_ORDER_SVG=<file.svg> cargo test print_cut_order -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn print_cut_order() {
+        let path = std::env::var("RK40_ORDER_SVG").expect("RK40_ORDER_SVG fehlt");
+        let svg = std::fs::read_to_string(path).unwrap();
+        let tree = usvg::Tree::from_str(&svg, &svg_options()).unwrap();
+        let (palette, _, _) = extract_palette(&svg).unwrap();
+        let mut s = settings();
+        s.mode = None;
+        s.color_rules = palette
+            .iter()
+            .map(|c| ColorRule {
+                color: c.color.clone(),
+                op: if c.color == "#0000ff" { OpKind::VectorEngrave } else { OpKind::VectorCut },
+            })
+            .collect();
+        let rules = RuleSet::from_settings(&s);
+        s.optimize_paths = false;
+        let (_, plain) = vector_lines(&tree, &s, &rules, 1.0);
+        s.optimize_paths = true;
+        let (eng, cut) = vector_lines(&tree, &s, &rules, 1.0);
+        let mm = 25.4 / 96.0;
+        println!(
+            "cut travel: {:.0} mm document order, {:.0} mm optimised",
+            travel_px(&plain, (0.0, 0.0)) * mm,
+            travel_px(&cut, (0.0, 0.0)) * mm
+        );
+        println!("engrave: {} lines", eng.len());
+        for (i, l) in cut.iter().enumerate() {
+            let b = bbox_of(l);
+            println!("cut {i:2}: {:7.1}×{:7.1} @ {:7.1},{:7.1}", b.2 - b.0, b.3 - b.1, b.0, b.1);
+        }
     }
 }

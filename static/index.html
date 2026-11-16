@@ -589,6 +589,26 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
             <input type="number" id="cpasses" value="1" min="1" max="50" step="1">
           </div>
         </div>
+        <div class="checkrow">
+          <label data-i18n-title="param.inside_first_title" title="Löcher und Ausschnitte werden vor der umschließenden Kontur geschnitten, damit das Teil nicht vorher lose wird und verrutscht"><input type="checkbox" id="insidefirst" checked> <span data-i18n="param.inside_first">Innen zuerst schneiden</span></label>
+        </div>
+      </div>
+
+      <div id="sec_travel">
+        <h3><span data-i18n="op.section_travel">Leerfahrten</span></h3>
+        <div class="checkrow">
+          <div style="flex:0 0 150px">
+            <label data-i18n="param.rapid_feed" data-i18n-title="param.rapid_feed_title" title="Tempo, mit dem der Kopf bei ausgeschaltetem Laser zwischen zwei Linien fährt. Langsamer = weniger Ruck am Werkstück, dafür etwas längere Laufzeit">Tempo</label>
+            <select id="rapidfeed">
+              <option value="0" data-i18n="param.rapid_full">Maximal (Eilgang)</option>
+              <option value="100">100 mm/s</option>
+              <option value="50">50 mm/s</option>
+              <option value="30">30 mm/s</option>
+              <option value="20">20 mm/s</option>
+            </select>
+          </div>
+          <label style="align-self:end" data-i18n-title="param.optimize_paths_title" title="Fährt immer die nächstgelegene Linie an, offene Linien auch rückwärts, Konturen ab dem nächsten Punkt – spart Leerfahrten"><input type="checkbox" id="optpaths" checked> <span data-i18n="param.optimize_paths">Wege optimieren</span></label>
+        </div>
       </div>
 
       <div class="btnrow">
@@ -784,6 +804,14 @@ const I18N = {
     "param.invert": "Invertieren",
     "param.bottom_up": "Von unten nach oben ↑",
     "param.bottom_up_title": "Y-Achse steppt beim Gravieren nur nach oben – hilfreich, wenn die Mechanik in einer Y-Richtung Probleme macht",
+    "param.inside_first": "Innen zuerst schneiden",
+    "op.section_travel": "Leerfahrten",
+    "param.rapid_feed": "Tempo",
+    "param.rapid_feed_title": "Tempo, mit dem der Kopf bei ausgeschaltetem Laser zwischen zwei Linien fährt. Langsamer = weniger Ruck am Werkstück, dafür etwas längere Laufzeit",
+    "param.rapid_full": "Maximal (Eilgang)",
+    "param.optimize_paths": "Wege optimieren",
+    "param.optimize_paths_title": "Fährt immer die nächstgelegene Linie an, offene Linien auch rückwärts, Konturen ab dem nächsten Punkt – spart Leerfahrten",
+    "param.inside_first_title": "Löcher und Ausschnitte werden vor der umschließenden Kontur geschnitten, damit das Teil nicht vorher lose wird und verrutscht",
     "btn.print": "▶ Drucken",
     "btn.save_project": "💾 Als Projekt speichern",
     "btn.save_defaults": "Werte als Standard speichern",
@@ -950,6 +978,14 @@ const I18N = {
     "param.invert": "Invert",
     "param.bottom_up": "Bottom to top ↑",
     "param.bottom_up_title": "Y axis only steps upward while engraving – helpful if mechanics struggle in one Y direction",
+    "param.inside_first": "Cut inside first",
+    "op.section_travel": "Travel moves",
+    "param.rapid_feed": "Speed",
+    "param.rapid_feed_title": "Speed of the head between two lines with the laser off. Slower = less jolt on the workpiece, slightly longer job time",
+    "param.rapid_full": "Full speed (rapid)",
+    "param.optimize_paths": "Optimise paths",
+    "param.optimize_paths_title": "Always moves to the nearest line next, runs open lines backwards and starts contours at their nearest point – saves travel",
+    "param.inside_first_title": "Holes and cut-outs are cut before the contour around them, so the part doesn't come loose and shift early",
     "btn.print": "▶ Print",
     "btn.save_project": "💾 Save as project",
     "btn.save_defaults": "Save values as defaults",
@@ -2389,6 +2425,9 @@ function collectSettingsFor(d){
     dither: $("dither").checked,
     invert: $("invert").checked,
     bottom_up: $("bottomup").checked,
+    inside_first: $("insidefirst").checked,
+    optimize_paths: $("optpaths").checked,
+    rapid_feed_mmps: parseFloat($("rapidfeed").value) || 0,
     offset_x_mm: d.x,
     offset_y_mm: d.y,
     scale: d.scale,
@@ -2425,6 +2464,9 @@ function applyOpSettings(s){
   if(s.dither != null) $("dither").checked = !!s.dither;
   if(s.invert != null) $("invert").checked = !!s.invert;
   if(s.bottom_up != null) $("bottomup").checked = !!s.bottom_up;
+  if(s.inside_first != null) $("insidefirst").checked = !!s.inside_first;
+  if(s.optimize_paths != null) $("optpaths").checked = !!s.optimize_paths;
+  if(s.rapid_feed_mmps != null) $("rapidfeed").value = String(s.rapid_feed_mmps || 0);
   if(s.jog_feed_mmps != null) $("jogfeed").value = s.jog_feed_mmps > 0 ? String(s.jog_feed_mmps) : "";
 }
 

@@ -25,6 +25,10 @@ pub struct ECoord {
 
 pub struct Egv {
     pub data: Vec<u8>,
+    /// Travel speed in mm/s for laser-off moves inside a job (K40 Whisperer's
+    /// "Rapid Speed"). 0 = the board's unmoderated rapid jump at full speed,
+    /// which starts and stops abruptly and can shake the workpiece.
+    pub rapid_feed: f64,
     modal_dir: u8,
     modal_dist: i64,
     modal_on: bool,
@@ -36,6 +40,7 @@ impl Egv {
     pub fn new() -> Egv {
         Egv {
             data: Vec::new(),
+            rapid_feed: 0.0,
             modal_dir: 0,
             modal_dist: 0,
             modal_on: false,
@@ -218,8 +223,50 @@ impl Egv {
         (e0, e1, p.loop_id)
     }
 
-    fn rapid_move_slow(&mut self, dx: i64, dy: i64) {
-        self.make_dir_dist(dx, dy);
+    /// Laser-off travel inside moderated mode. With a rapid feed set, the
+    /// travel runs at that speed (speed change there and back); otherwise at
+    /// the current work speed. Tiny hops never switch speed.
+    fn rapid_move_slow(&mut self, dx: i64, dy: i64, feed: f64, board: Board, min_rapid: i64) {
+        let tiny = dx.abs() < min_rapid && dy.abs() < min_rapid;
+        if self.rapid_feed > 0.0 && !tiny && self.rapid_feed != feed {
+            self.change_speed(self.rapid_feed, board, false, true, 0);
+            self.make_dir_dist(dx, dy);
+            self.change_speed(feed, board, false, true, 0);
+        } else {
+            self.make_dir_dist(dx, dy);
+        }
+    }
+
+    /// Raster variant: travel at the rapid feed, then switch back to the
+    /// raster speed code and finish with one tiny unmoderated step.
+    fn raster_rapid_move_slow(&mut self, dx: i64, dy: i64, raster_step: i64, feed: f64, board: Board) {
+        let tiny_step = raster_step.signum();
+        self.change_speed(self.rapid_feed, board, false, false, 0);
+        self.make_dir_dist(dx, dy - tiny_step);
+        self.flush(Some(false));
+        self.change_speed(feed, board, false, false, raster_step);
+        self.write(b'N');
+        self.make_dir_dist(0, tiny_step);
+        self.flush(Some(false));
+        self.write(b'S');
+        self.write(b'E');
+    }
+
+    /// Standalone moderated move at `feed` that ends with '@NSE' so the main
+    /// program can follow (K40W `make_egv_rapid` with finish=False).
+    fn make_egv_rapid_prefix(&mut self, dx: i64, dy: i64, feed: f64, board: Board) {
+        for code in self.make_speed(feed, board, 0) {
+            self.write(code);
+        }
+        self.flush(Some(false));
+        for &c in b"NRBS1E" {
+            self.write(c);
+        }
+        self.make_cut_line(dx, dy, false);
+        self.flush(Some(false));
+        for &c in b"@NSE" {
+            self.write(c);
+        }
     }
 
     fn rapid_move_fast(&mut self, dx: i64, dy: i64) {
@@ -272,9 +319,12 @@ impl Egv {
             for &code in &speed {
                 self.write(code);
             }
+            let rapid = self.rapid_feed > 0.0;
             let (mut lastx, mut lasty, mut last_loop) =
                 self.ecoord_adj(&ecoords[0], scale, flip_x_offset);
-            self.make_dir_dist(lastx - start_x, lasty - start_y);
+            if !rapid {
+                self.make_dir_dist(lastx - start_x, lasty - start_y);
+            }
             self.flush(Some(false));
             self.write(b'N');
             self.write(if lasty - start_y <= 0 { DOWN } else { UP });
@@ -285,6 +335,9 @@ impl Egv {
 
             let mut laser = false;
             let min_rapid = 5i64;
+            if rapid {
+                self.rapid_move_slow(lastx - start_x, lasty - start_y, feed, board, min_rapid);
+            }
             for p in ecoords.iter().skip(1) {
                 let (e0, e1, e2) = self.ecoord_adj(p, scale, flip_x_offset);
                 if e2 == last_loop && !laser {
@@ -297,8 +350,8 @@ impl Egv {
                 if dx.abs() + dy.abs() > 0 {
                     if laser {
                         self.make_cut_line(dx, dy, true);
-                    } else if dx.abs() < min_rapid && dy.abs() < min_rapid {
-                        self.rapid_move_slow(dx, dy);
+                    } else if (dx.abs() < min_rapid && dy.abs() < min_rapid) || rapid {
+                        self.rapid_move_slow(dx, dy, feed, board, min_rapid);
                     } else {
                         self.rapid_move_fast(dx, dy);
                     }
@@ -310,8 +363,8 @@ impl Egv {
 
             let dx = start_x - lastx;
             let dy = start_y - lasty;
-            if dx.abs() < min_rapid && dy.abs() < min_rapid {
-                self.rapid_move_slow(dx, dy);
+            if (dx.abs() < min_rapid && dy.abs() < min_rapid) || rapid {
+                self.rapid_move_slow(dx, dy, feed, board, min_rapid);
             } else {
                 self.rapid_move_fast(dx, dy);
             }
@@ -344,11 +397,17 @@ impl Egv {
             let (mut lastx, mut lasty, _) = self.ecoord_adj(&scanline[0][0], scale, flip_x_offset);
             let dx_start = lastx - start_x;
             let dy_start = lasty - start_y;
+            let rapid = self.rapid_feed > 0.0;
 
+            if rapid {
+                self.make_egv_rapid_prefix(dx_start, dy_start, self.rapid_feed, board);
+            }
             for &code in &speed {
                 self.write(code);
             }
-            self.make_dir_dist(dx_start, dy_start);
+            if !rapid {
+                self.make_dir_dist(dx_start, dy_start);
+            }
 
             self.flush(Some(false));
             self.write(b'N');
@@ -382,11 +441,15 @@ impl Egv {
                     let yoff_sign = if yoffset >= 0 { 1 } else { -1 };
                     if (dy + yoffset) * yoff_sign < 0 {
                         self.flush(Some(false));
-                        self.write(b'N');
-                        self.make_dir_dist(0, dy + yoffset);
-                        self.flush(Some(false));
-                        self.write(b'S');
-                        self.write(b'E');
+                        if rapid {
+                            self.raster_rapid_move_slow(0, dy + yoffset, raster_step, feed, board);
+                        } else {
+                            self.write(b'N');
+                            self.make_dir_dist(0, dy + yoffset);
+                            self.flush(Some(false));
+                            self.write(b'S');
+                            self.write(b'E');
+                        }
                         rapid_flag = true;
                     } else {
                         let adj_steps = dy / raster_step; // truncating division
@@ -451,8 +514,15 @@ impl Egv {
             };
 
             let max_return_feed = 50.0;
-            if feed > max_return_feed {
-                self.change_speed(max_return_feed, board, false, false);
+            let final_feed = if rapid {
+                self.rapid_feed
+            } else if feed > max_return_feed {
+                max_return_feed
+            } else {
+                0.0
+            };
+            if final_feed > 0.0 {
+                self.change_speed(final_feed, board, false, false, 0);
                 let dy_final = dy_final + raster_step.abs();
                 self.make_dir_dist(dx_final, dy_final);
             } else {
@@ -473,7 +543,7 @@ impl Egv {
         Ok(())
     }
 
-    fn change_speed(&mut self, feed: f64, board: Board, laser_on: bool, pad: bool) {
+    fn change_speed(&mut self, feed: f64, board: Board, laser_on: bool, pad: bool, raster_step: i64) {
         let cspad = 5i64;
         if laser_on {
             self.write(OFF);
@@ -487,7 +557,7 @@ impl Egv {
         self.write(b'N');
         self.write(b'S');
         self.write(b'E');
-        let speed = self.make_speed(feed, board, 0);
+        let speed = self.make_speed(feed, board, raster_step);
         for code in speed {
             self.write(code);
         }
@@ -593,5 +663,157 @@ mod tests {
         let mut e2 = Egv::new();
         e2.make_slow_move_data(0, 0, 50.0, Board::M2);
         assert!(e2.data.is_empty());
+    }
+
+    /// Minimal EGV interpreter for tests: returns the laser-on segments (in
+    /// mils, relative to the start) and the final head position.
+    #[allow(clippy::type_complexity)]
+    fn trace(data: &[u8]) -> (Vec<((i64, i64), (i64, i64))>, (i64, i64)) {
+        let (mut x, mut y) = (0i64, 0i64);
+        let (mut sx, mut sy) = (1i64, 1i64);
+        let mut axis = b'B';
+        let mut on = false;
+        let mut segs = Vec::new();
+        let mut i = 0;
+        while i < data.len() {
+            let c = data[i];
+            i += 1;
+            let n = match c {
+                b'C' if data.get(i) == Some(&b'V') => {
+                    i += 1;
+                    while i < data.len() && data[i].is_ascii_digit() {
+                        i += 1;
+                    }
+                    if data.get(i) == Some(&b'C') {
+                        i += 1;
+                    }
+                    continue;
+                }
+                b'V' => {
+                    // raster speed code: V<digits>G<3 digits>
+                    while i < data.len() && data[i].is_ascii_digit() {
+                        i += 1;
+                    }
+                    if data.get(i) == Some(&b'G') {
+                        i += 4;
+                    }
+                    continue;
+                }
+                b'S' => {
+                    if data.get(i) == Some(&b'1') {
+                        i += 1;
+                    }
+                    continue;
+                }
+                b'I' | b'N' | b'E' | b'F' | b'P' | b'@' => continue,
+                RIGHT | LEFT => {
+                    sx = if c == RIGHT { 1 } else { -1 };
+                    axis = c;
+                    continue;
+                }
+                UP | DOWN => {
+                    sy = if c == UP { 1 } else { -1 };
+                    axis = c;
+                    continue;
+                }
+                ANGLE => {
+                    axis = c;
+                    continue;
+                }
+                ON | OFF => {
+                    on = c == ON;
+                    continue;
+                }
+                b'z' => 255,
+                b'a'..=b'y' => (c - 96) as i64,
+                b'|' => {
+                    let v = 25 + (data[i] - 96) as i64;
+                    i += 1;
+                    v
+                }
+                b'0'..=b'9' => {
+                    let v: i64 = std::str::from_utf8(&data[i - 1..i + 2]).unwrap().parse().unwrap();
+                    i += 2;
+                    v
+                }
+                other => panic!("unexpected code {:?}", other as char),
+            };
+            let from = (x, y);
+            match axis {
+                RIGHT | LEFT => x += sx * n,
+                UP | DOWN => y += sy * n,
+                _ => {
+                    x += sx * n;
+                    y += sy * n;
+                }
+            }
+            if on {
+                segs.push((from, (x, y)));
+            }
+        }
+        (segs, (x, y))
+    }
+
+    fn two_squares() -> Vec<ECoord> {
+        let mut pts = Vec::new();
+        for (id, ox, oy) in [(1, 0.5, 0.5), (2, 3.0, 1.5)] {
+            for (dx, dy) in [(0.0, 0.0), (0.4, 0.0), (0.4, 0.4), (0.0, 0.4), (0.0, 0.0)] {
+                pts.push(ECoord { x: ox + dx, y: oy + dy, loop_id: id });
+            }
+        }
+        pts
+    }
+
+    #[test]
+    fn rapid_feed_keeps_cut_geometry() {
+        let pts = two_squares();
+        let mut fast = Egv::new();
+        fast.make_egv_data(&pts, 0.0, 0.0, 10.0, Board::M2, 0).unwrap();
+        let mut slow = Egv::new();
+        slow.rapid_feed = 50.0;
+        slow.make_egv_data(&pts, 0.0, 0.0, 10.0, Board::M2, 0).unwrap();
+
+        let (cuts_fast, end_fast) = trace(&fast.data);
+        let (cuts_slow, end_slow) = trace(&slow.data);
+        assert_eq!(end_fast, (0, 0), "fast program returns to start");
+        assert_eq!(end_slow, (0, 0), "slow program returns to start");
+        assert_eq!(cuts_fast, cuts_slow, "identical laser-on path");
+        assert_eq!(cuts_slow.first().unwrap().0, (500, 500));
+
+        // without rapid feed: no speed change inside the program; with it:
+        // a switch to the travel speed and back around every travel
+        let speed_changes = |d: &[u8]| d.windows(4).filter(|w| w == b"@NSE").count();
+        assert_eq!(speed_changes(&fast.data), 0);
+        assert_eq!(speed_changes(&slow.data), 6); // to start, between, back home
+        // the unmoderated rapid jump ("SE" without "S1E") is gone
+        let jumps = |d: &[u8]| {
+            d.windows(2).filter(|w| w == b"SE").count() - d.windows(3).filter(|w| w == b"NSE").count()
+        };
+        assert!(jumps(&fast.data) > 0);
+        assert_eq!(jumps(&slow.data), 0);
+    }
+
+    #[test]
+    fn rapid_feed_raster_returns_home() {
+        // two separated bands of scanlines force a rapid between them
+        let mut pts = Vec::new();
+        for (id, row) in (0..5).chain(40..45).enumerate() {
+            let id = id as i64 + 1;
+            let y = 1.0 - row as f64 * 0.002;
+            pts.push(ECoord { x: 0.5, y, loop_id: id });
+            pts.push(ECoord { x: 0.9, y, loop_id: id });
+        }
+        let run = |rapid: f64| {
+            let mut e = Egv::new();
+            e.rapid_feed = rapid;
+            e.make_egv_data(&pts, 0.0, 1.2, 100.0, Board::M2, -2).unwrap();
+            assert!(e.data.ends_with(b"FNSE"));
+            trace(&e.data)
+        };
+        let (cuts_fast, end_fast) = run(0.0);
+        let (cuts_slow, end_slow) = run(50.0);
+        assert!(!cuts_fast.is_empty());
+        assert_eq!(cuts_fast, cuts_slow, "identical laser-on path");
+        assert_eq!(end_fast, end_slow, "same final position");
     }
 }
